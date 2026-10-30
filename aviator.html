@@ -72,13 +72,13 @@ function errMsg(j,cash){if(j&&j.error==='already'&&cash)return 'ቀድሞ አው
 function post(url,body){body.initData=initData;
 return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){j._s=r.status;return j;});});}
 
-/* ---------- SOUND (matched to the reference video: hit, drone, rising sweep, bass drop) ---------- */
+/* ---------- SOUND: classic flight + cash-out, video-style crash ---------- */
 var AS=(function(){
-var ac=null,master=null,muted=false,eng=null,nbuf=null;
+var ac=null,master=null,muted=false,eng=null,lastTick=0,nbuf=null;
 try{muted=localStorage.getItem('av_mute')==='1';}catch(e){}
 function init(){
 if(!ac){var C=window.AudioContext||window.webkitAudioContext;if(!C)return false;
-ac=new C();master=ac.createGain();master.gain.value=muted?0:0.8;master.connect(ac.destination);}
+ac=new C();master=ac.createGain();master.gain.value=muted?0:0.7;master.connect(ac.destination);}
 if(ac.state==='suspended'){try{ac.resume();}catch(e){}}
 return true;}
 function nb(){
@@ -92,74 +92,72 @@ var t=ac.currentTime+(delay||0),o=ac.createOscillator(),g=ac.createGain();
 o.type=type||'sine';o.frequency.setValueAtTime(f,t);
 if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+d);
 g.gain.setValueAtTime(0.0001,t);
-g.gain.exponentialRampToValueAtTime(vol||0.3,t+0.012);
+g.gain.exponentialRampToValueAtTime(vol||0.3,t+0.01);
 g.gain.exponentialRampToValueAtTime(0.0001,t+d);
 o.connect(g);g.connect(master);o.start(t);o.stop(t+d+0.05);}
+/* one-shot filtered whoosh: type 'bandpass' or 'highpass', sweep f1->f2 */
 function whoosh(d,vol,type,f1,f2,delay){
 if(!init()||ac.state!=='running')return;
 var t=ac.currentTime+(delay||0),s=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain();
-s.buffer=nb();f.type=type;f.Q.value=0.8;
+s.buffer=nb();f.type=type;f.Q.value=0.9;
 f.frequency.setValueAtTime(f1,t);f.frequency.exponentialRampToValueAtTime(f2,t+d);
 g.gain.setValueAtTime(0.0001,t);
-g.gain.exponentialRampToValueAtTime(vol,t+d*0.3);
+g.gain.exponentialRampToValueAtTime(vol,t+d*0.35);
 g.gain.exponentialRampToValueAtTime(0.0001,t+d);
 s.connect(f);f.connect(g);g.connect(master);s.start(t);s.stop(t+d+0.05);}
-function hit(){            /* big opening hit */
-tone(490,0.9,'triangle',0.38);
-tone(980,0.5,'sine',0.12);
-tone(245,0.9,'sine',0.2);
-whoosh(0.6,0.25,'bandpass',600,2500);}
 var o={
 unlock:init,
-bet:function(){tone(490,0.12,'triangle',0.18);tone(740,0.10,'sine',0.10,null,0.04);},
+bet:function(){tone(1200,0.04,'square',0.10);tone(1800,0.05,'square',0.08,null,0.03);},
 startFlight:function(){
 if(!init())return;o.stopEngine();
-hit();
+whoosh(1.4,0.5,'bandpass',250,3000);          /* take-off whoosh */
 var t=ac.currentTime;
-/* low moving drone */
-var o1=ac.createOscillator(),o2=ac.createOscillator(),lfo=ac.createOscillator(),lg=ac.createGain(),
-    df=ac.createBiquadFilter(),dg=ac.createGain();
-o1.type='triangle';o1.frequency.value=184;
-o2.type='sine';o2.frequency.value=92;
-lfo.frequency.value=0.7;lg.gain.value=10;
-lfo.connect(lg);lg.connect(o1.frequency);
-df.type='lowpass';df.frequency.value=900;
-dg.gain.setValueAtTime(0.0001,t);dg.gain.exponentialRampToValueAtTime(0.2,t+1.0);
-o1.connect(df);o2.connect(df);df.connect(dg);dg.connect(master);
-/* rising bright sweep (gets louder and higher as x grows) */
+/* propeller / engine body */
+var o1=ac.createOscillator(),o2=ac.createOscillator(),pf=ac.createBiquadFilter(),pg=ac.createGain(),
+    lfo=ac.createOscillator(),lg=ac.createGain();
+o1.type='sawtooth';o1.frequency.value=70;
+o2.type='square';o2.frequency.value=35;
+pf.type='lowpass';pf.frequency.value=420;
+pg.gain.setValueAtTime(0.0001,t);pg.gain.exponentialRampToValueAtTime(0.16,t+0.8);
+lfo.frequency.value=28;lg.gain.value=0.07;        /* rotor chop */
+lfo.connect(lg);lg.connect(pg.gain);
+o1.connect(pf);o2.connect(pf);pf.connect(pg);pg.connect(master);
+/* continuous wind / jet air */
 var s=ac.createBufferSource(),wf=ac.createBiquadFilter(),wg=ac.createGain();
-s.buffer=nb();s.loop=true;wf.type='bandpass';wf.frequency.value=800;wf.Q.value=0.8;
-wg.gain.value=0.0001;
+s.buffer=nb();s.loop=true;wf.type='bandpass';wf.frequency.value=400;wf.Q.value=0.7;
+wg.gain.setValueAtTime(0.0001,t);wg.gain.exponentialRampToValueAtTime(0.18,t+1.2);
 s.connect(wf);wf.connect(wg);wg.connect(master);
 o1.start();o2.start();lfo.start();s.start();
-eng={o1:o1,o2:o2,lfo:lfo,dg:dg,s:s,wf:wf,wg:wg};},
+eng={o1:o1,o2:o2,lfo:lfo,pf:pf,pg:pg,s:s,wf:wf,wg:wg};lastTick=0;},
 update:function(m){
 if(!eng||!ac)return;
-m=Math.max(1,m||1);var t=ac.currentTime,k=Math.min(m,25);
-eng.o1.frequency.setTargetAtTime(184+k*9,t,0.2);
-eng.o2.frequency.setTargetAtTime(92+k*4.5,t,0.2);
-eng.wf.frequency.setTargetAtTime(800+k*150,t,0.2);
-eng.wg.gain.setTargetAtTime(Math.min(0.26,0.012*(k-1)+0.01),t,0.2);},
+m=Math.max(1,m||1);var t=ac.currentTime,k=Math.min(m,30);
+eng.o1.frequency.setTargetAtTime(70+k*7,t,0.15);
+eng.o2.frequency.setTargetAtTime(35+k*3.5,t,0.15);
+eng.pf.frequency.setTargetAtTime(420+k*60,t,0.15);
+eng.lfo.frequency.setTargetAtTime(28+k*0.7,t,0.15);
+eng.wf.frequency.setTargetAtTime(400+k*140,t,0.15);
+eng.wg.gain.setTargetAtTime(0.18+k*0.006,t,0.15);},
 stopEngine:function(){
 if(!eng)return;
 try{var t=ac.currentTime;
-eng.dg.gain.cancelScheduledValues(t);eng.dg.gain.setTargetAtTime(0.0001,t,0.04);
-eng.wg.gain.cancelScheduledValues(t);eng.wg.gain.setTargetAtTime(0.0001,t,0.04);
-eng.o1.stop(t+0.3);eng.o2.stop(t+0.3);eng.lfo.stop(t+0.3);eng.s.stop(t+0.3);}catch(e){}
+eng.pg.gain.cancelScheduledValues(t);eng.pg.gain.setTargetAtTime(0.0001,t,0.05);
+eng.wg.gain.cancelScheduledValues(t);eng.wg.gain.setTargetAtTime(0.0001,t,0.05);
+eng.o1.stop(t+0.4);eng.o2.stop(t+0.4);eng.lfo.stop(t+0.4);eng.s.stop(t+0.4);}catch(e){}
 eng=null;},
-cashout:function(){
-tone(490,0.7,'triangle',0.3);
-tone(980,0.4,'sine',0.14,null,0.02);
-tone(1568,0.25,'triangle',0.12,null,0.1);
-tone(2093,0.3,'sine',0.08,null,0.14);},
-crash:function(){          /* deep bass drop, then a thin tail */
+cashout:function(){                                 /* classic "ka-ching" */
+tone(1568,0.10,'triangle',0.22);
+tone(2093,0.35,'triangle',0.26,null,0.08);
+tone(3136,0.30,'sine',0.10,null,0.08);
+tone(4186,0.20,'sine',0.05,null,0.12);},
+crash:function(){          /* deep bass drop like the video, then a thin tail */
 o.stopEngine();
 tone(110,0.8,'sine',0.75,38);
 tone(60,0.6,'sine',0.6,36,0.02);
 whoosh(0.5,0.3,'lowpass',2500,150);
 tone(620,0.5,'sine',0.07,null,0.35);},
 toggleMute:function(){
-muted=!muted;if(master)master.gain.value=muted?0:0.8;
+muted=!muted;if(master)master.gain.value=muted?0:0.7;
 try{localStorage.setItem('av_mute',muted?'1':'0');}catch(e){}
 return muted;},
 isMuted:function(){return muted;},
@@ -167,6 +165,7 @@ pause:function(){if(ac&&ac.state==='running'){try{ac.suspend();}catch(e){}}},
 resume:function(){if(ac&&ac.state==='suspended'){try{ac.resume();}catch(e){}}}
 };
 return o;})();
+
 document.addEventListener('pointerdown',function(){AS.unlock();});
 document.addEventListener('touchstart',function(){AS.unlock();},{passive:true});
 document.addEventListener('visibilitychange',function(){if(document.hidden)AS.pause();else AS.resume();});
