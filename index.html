@@ -102,7 +102,7 @@ if(tg){try{tg.ready();tg.expand();}catch(e){}}
 document.querySelectorAll('.card').forEach(function(a){
 a.href=a.getAttribute('data-p')+location.hash;});
 document.getElementById('dep').onclick=function(){
-var u='https://t.me/BingotomBot';
+var u='https://t.me/BingotomBot?start=deposit';
 try{if(tg&&tg.openTelegramLink){tg.openTelegramLink(u);}else{window.open(u,'_blank');}}catch(e){}
 setTimeout(function(){try{if(tg)tg.close();}catch(e){}},400);
 };
