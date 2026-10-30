@@ -312,6 +312,17 @@ const BET_LENGTH = 40;
 const SPIN_LENGTH = 10;
 const RESULT_DISPLAY_MS = 4000;
 const CYCLE_LENGTH = BET_LENGTH + SPIN_LENGTH;
+let timeOffset = 0;
+async function syncTime(){
+  try{
+    const t0 = Date.now();
+    const r = await fetch('/', {method:'HEAD', cache:'no-store'});
+    const d = r.headers.get('date');
+    if (d) timeOffset = new Date(d).getTime() + 500 - (t0 + Date.now())/2;
+  }catch(e){}
+}
+syncTime();
+setInterval(syncTime, 300000);
 const HISTORY_MAX = 10;
 let resultHistory = [];
 
@@ -459,7 +470,7 @@ function startWinnerBurstForRound(){
 showDemoWinner();
 startWinnerBurstForRound();
 
-function roundIdNowSafe(){ return Math.floor(Date.now()/1000 / CYCLE_LENGTH); }
+function roundIdNowSafe(){ return Math.floor((Date.now()+timeOffset)/1000 / CYCLE_LENGTH); }
 
 /* ---------- roulette colours ---------- */
 const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
@@ -619,8 +630,8 @@ let currentRotation = 0;
 let lastCycleId = null;
 let lastPhase = null;
 
-function roundIdNow(){ return Math.floor(Date.now()/1000 / CYCLE_LENGTH); }
-function cyclePosNow(){ return Math.floor(Date.now()/1000) % CYCLE_LENGTH; }
+function roundIdNow(){ return Math.floor((Date.now()+timeOffset)/1000 / CYCLE_LENGTH); }
+function cyclePosNow(){ return Math.floor((Date.now()+timeOffset)/1000) % CYCLE_LENGTH; }
 function isSpinPhase(pos){ return pos >= BET_LENGTH; }
 function secondsLeftInBet(pos){ return BET_LENGTH - pos; }
 function secondsLeftInSpin(pos){ return CYCLE_LENGTH - pos; }
