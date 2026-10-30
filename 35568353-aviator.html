@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="am"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Aviator</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#0e0e12;color:#fff;font-family:system-ui,sans-serif;user-select:none;padding-bottom:20px}
+.top{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#1b1c1d}
+.back{background:#2c2d30;border:0;color:#fff;border-radius:8px;padding:6px 12px;font-size:16px}
+.logo{color:#e50539;font-style:italic;font-weight:900;font-size:24px}
+.bal{font-weight:700;color:#28a909;font-size:14px}
+.hist{display:flex;gap:6px;overflow:hidden;padding:8px 10px;background:#101012;min-height:36px}
+.hist span{font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;background:#1b1c1d;white-space:nowrap}
+.c1{color:#34b4ff}.c2{color:#913ef8}.c3{color:#c017b4}
+.game{position:relative;margin:8px;border:1px solid #2a2a2e;border-radius:12px;overflow:hidden;background:#000;height:230px}
+canvas{width:100%;height:100%;display:block}
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center}
+.big{font-size:52px;font-weight:900}
+.msg{font-size:14px;font-weight:700;letter-spacing:1px}
+.bar{width:60%;height:5px;background:#222;border-radius:3px;margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;background:#e50539;width:100%}
+.pl{position:absolute;top:6px;left:8px;font-size:12px;color:#aaa}
+.panel{margin:8px;padding:8px;background:#1b1c1d;border:1px solid #2a2a2e;border-radius:12px}
+.tabs{display:flex;background:#101012;border-radius:16px;margin:0 auto 8px;width:150px}
+.tabs b{flex:1;text-align:center;padding:5px;font-size:13px;border-radius:16px;color:#888}
+.tabs b.on{background:#2c2d30;color:#fff}
+.row{display:flex;gap:8px;align-items:stretch}
+.l{flex:1}
+.step{display:flex;align-items:center;justify-content:space-between;background:#000;border-radius:18px;padding:3px 6px}
+.step button{width:26px;height:26px;border-radius:50%;border:1px solid #666;background:none;color:#fff;font-size:16px}
+.step span{font-weight:700}
+.q{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px}
+.q button{background:#2c2d30;border:0;color:#bbb;border-radius:6px;padding:5px;font-size:13px}
+.go{width:42%;border:2px solid #5fd33a;border-radius:12px;font-weight:800;font-size:15px;color:#fff;background:#28a909}
+.go.cash{background:#d07206;border-color:#ffa53a}
+.go.wait{background:#555;border-color:#777;font-size:13px}
+.auto{display:none;margin-top:6px;font-size:13px;color:#aaa}
+.auto input{width:70px;background:#000;border:1px solid #444;color:#fff;border-radius:6px;padding:4px;margin-left:6px}
+#toast{position:fixed;left:50%;top:60px;transform:translateX(-50%);background:#333;padding:8px 14px;border-radius:8px;font-size:14px;display:none;z-index:9;max-width:90%;text-align:center}
+</style>
+</head><body>
+<div class="top"><button class="back" id="back">&lsaquo;</button><div class="logo">Aviator</div><div class="bal" id="bal">0.00 ብር</div></div>
+<div class="hist" id="hist"></div>
+<div class="game">
+<canvas id="cv"></canvas>
+<div class="pl" id="pl"></div>
+<div class="ov"><div class="msg" id="ovm"></div><div class="big" id="ovb"></div><div class="bar" id="ovbar"><i id="ovi"></i></div></div>
+</div>
+<div id="panels"></div>
+<div id="toast"></div>
+<script>
+var tg=window.Telegram&&window.Telegram.WebApp;
+if(tg){try{tg.ready();tg.expand();}catch(e){}}
+var initData=tg?tg.initData:'';
+var STAKES=[5,10,20,30,40,50,80,100,200];
+var QUICK=[10,20,50,100];
+var RATE=0.00007;
+var S=null,flyStart=0,betEnd=0,crashT=0,lastPhase='',inflight=false,histKey='';
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),W=0,H=0;
+
+function $(id){return document.getElementById(id);}
+function fmt(n){return Number(n).toFixed(2);}
+var tt=null;
+function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(function(){t.style.display='none';},2500);}
+var ERR={slot:'የተሳሳተ ቦታ',amount:'የተሳሳተ የገንዘብ መጠን',auto:'ራስ-ማውጫ ከ1.01 እስከ 200 መሆን አለበት',closed:'ውርርድ ተዘግቷል፣ ቀጣዩን ዙር ይጠብቁ',already:'ቀድሞ ተወራርደዋል',balance:'በቂ ቀሪ ሂሳብ የለም',nobet:'ውርርድ የለም',notflying:'አውሮፕላኑ ገና አልበረረም',crashed:'አውሮፕላኑ በረረ! አርፍደዋል',auth:'እባክዎ በTelegram ውስጥ ይክፈቱ'};
+function errMsg(j,cash){if(j&&j.error==='already'&&cash)return 'ቀድሞ አውጥተዋል';return (j&&ERR[j.error])||'ስህተት ተፈጥሯል፣ እንደገና ይሞክሩ';}
+
+function post(url,body){body.initData=initData;
+return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){j._s=r.status;return j;});});}
+
+/* ---------- panels ---------- */
+var P=[];
+function mk(i){
+var d=document.createElement('div');d.className='panel';
+var q='';QUICK.forEach(function(v){q+='<button data-q="'+v+'">'+v+'</button>';});
+d.innerHTML='<div class="tabs"><b class="on" data-t="bet">Bet</b><b data-t="auto">Auto</b></div>'+
+'<div class="row"><div class="l"><div class="step"><button data-a="-">&minus;</button><span class="amt">10.00</span><button data-a="+">+</button></div><div class="q">'+q+'</div></div><button class="go">Bet</button></div>'+
+'<div class="auto">Auto cash out <input type="number" step="0.01" min="1.01" max="200" value="2.00"> x</div>';
+$('panels').appendChild(d);
+var p={i:i,idx:1,tab:'bet',busy:false,el:d,amt:d.querySelector('.amt'),go:d.querySelector('.go'),au:d.querySelector('.auto'),av:d.querySelector('.auto input'),last:''};
+d.querySelectorAll('.tabs b').forEach(function(b){b.onclick=function(){p.tab=b.getAttribute('data-t');d.querySelectorAll('.tabs b').forEach(function(x){x.className=(x===b)?'on':'';});p.au.style.display=(p.tab==='auto')?'block':'none';};});
+d.querySelectorAll('[data-a]').forEach(function(b){b.onclick=function(){var s=b.getAttribute('data-a')==='+'?1:-1;p.idx=Math.max(0,Math.min(STAKES.length-1,p.idx+s));};});
+d.querySelectorAll('[data-q]').forEach(function(b){b.onclick=function(){var k=STAKES.indexOf(parseInt(b.getAttribute('data-q'),10));if(k>=0)p.idx=k;};});
+p.go.onclick=function(){act(p);};
+P.push(p);
+}
+function myBet(i){return (S&&S.my_bets&&S.my_bets[i])||null;}
+
+function act(p){
+if(!S||p.busy)return;
+var my=myBet(p.i),ph=S.phase;
+if(ph==='flying'&&my&&!my.cashed){
+p.busy=true;
+post('/api/aviator/cashout',{slot:p.i}).then(function(j){p.busy=false;
+if(j.error){toast(errMsg(j,true));}
+else{toast('x'+fmt(j.mult)+' — '+fmt(j.win)+' ብር አሸንፈዋል!');if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';}
+poll();}).catch(function(){p.busy=false;toast('ግንኙነት የለም');});
+return;}
+if(ph==='betting'&&!my){
+var auto=null;
+if(p.tab==='auto'){auto=parseFloat(p.av.value);if(!(auto>=1.01&&auto<=200)){toast(ERR.auto);return;}}
+p.busy=true;
+post('/api/aviator/bet',{slot:p.i,amount:STAKES[p.idx],auto:auto}).then(function(j){p.busy=false;
+if(j.error){toast(errMsg(j,false));}
+else{toast('ተወራርደዋል '+fmt(STAKES[p.idx])+' ብር');if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';}
+poll();}).catch(function(){p.busy=false;toast('ግንኙነት የለም');});
+return;}
+if(ph==='flying'&&!my)toast('ቀጣዩን ዙር ይጠብቁ');
+}
+
+function cur(){
+if(!S)return 1;
+if(S.phase==='flying'){var ms=Math.max(0,Date.now()-flyStart);return Math.max(1,Math.floor(Math.exp(RATE*ms)*100)/100);}
+if(S.phase==='crashed')return S.crash||S.mult||1;
+return 1;}
+
+function updPanel(p){
+var my=myBet(p.i),ph=S?S.phase:'',m=cur(),t,c;
+p.amt.textContent=fmt(STAKES[p.idx]);
+if(!S){t='...';c='go wait';}
+else if(ph==='flying'&&my&&!my.cashed){t='Cash out '+fmt(Math.floor(my.amount*m*100)/100)+' ብር';c='go cash';}
+else if(my&&my.cashed){t='አሸንፈዋል '+fmt(my.win)+' ብር';c='go wait';}
+else if(my&&ph==='betting'){t='ተወራርዷል '+my.amount+' ብር';c='go wait';}
+else if(my&&ph==='crashed'){t='ተሸንፈዋል';c='go wait';}
+else if(ph==='betting'){t='Bet '+fmt(STAKES[p.idx])+' ብር';c='go';}
+else{t='ቀጣዩን ዙር ይጠብቁ';c='go wait';}
+if(p.last!==t+'|'+c){p.last=t+'|'+c;p.go.textContent=t;p.go.className=c;}
+}
+
+/* ---------- polling ---------- */
+function poll(){
+if(inflight)return;inflight=true;
+fetch('/api/aviator/state?initData='+encodeURIComponent(initData)).then(function(r){return r.json();}).then(function(j){
+inflight=false;
+if(j.error){if(j.error==='auth')toast(ERR.auth);return;}
+var now=Date.now();
+S=j;
+if(j.phase==='flying')flyStart=now-(j.flying_ms||0);
+if(j.phase==='betting')betEnd=now+(j.bet_left_ms||0);
+if(j.phase!==lastPhase){if(j.phase==='crashed')crashT=now;lastPhase=j.phase;}
+if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';
+$('pl').textContent='ተጫዋቾች: '+(j.players||0);
+var h=(j.history||[]);var k=h.join(',');
+if(k!==histKey){histKey=k;$('hist').innerHTML=h.map(function(v){return '<span class="'+(v>=10?'c3':v>=2?'c2':'c1')+'">'+fmt(v)+'x</span>';}).join('');}
+}).catch(function(){inflight=false;});
+}
+
+/* ---------- drawing ---------- */
+function resize(){var r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;W=r.width;H=r.height;cv.width=Math.round(W*d);cv.height=Math.round(H*d);ctx.setTransform(d,0,0,d,0,0);}
+function rays(t){
+ctx.save();ctx.translate(0,H);ctx.rotate(t/20000);
+var n=18,R=Math.sqrt(W*W+H*H)*1.3;
+ctx.fillStyle='#0d0d12';
+for(var k=0;k<n;k++){var a=k*(Math.PI*2/n);ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R,a,a+Math.PI/n);ctx.closePath();ctx.fill();}
+ctx.restore();}
+function plane(x,y,ang){
+ctx.save();ctx.translate(x,y);ctx.rotate(ang);
+ctx.fillStyle='#e50539';
+ctx.beginPath();ctx.ellipse(0,0,26,7,0,0,6.283);ctx.fill();
+ctx.beginPath();ctx.moveTo(-20,-3);ctx.lineTo(-31,-17);ctx.lineTo(-13,-3);ctx.closePath();ctx.fill();
+ctx.fillStyle='#a8032f';
+ctx.beginPath();ctx.moveTo(-4,3);ctx.lineTo(-15,17);ctx.lineTo(5,17);ctx.lineTo(9,3);ctx.closePath();ctx.fill();
+ctx.fillStyle='#ffd0d8';ctx.beginPath();ctx.ellipse(10,-2,5,3,0,0,6.283);ctx.fill();
+ctx.fillStyle='#ff5a7a';ctx.beginPath();ctx.arc(26,0,3,0,6.283);ctx.fill();
+ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(31,-10);ctx.lineTo(31,10);ctx.stroke();
+ctx.restore();}
+
+function draw(){
+var now=Date.now();
+ctx.clearRect(0,0,W,H);ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+rays(now);
+var ph=S?S.phase:'',m=cur(),ms=0;
+if(ph==='flying')ms=Math.max(0,now-flyStart);
+else if(ph==='crashed')ms=Math.log(Math.max(1.0001,m))/RATE;
+if(ph==='flying'||ph==='crashed'){
+var padL=14,padB=18,vMs=Math.max(5000,ms),vM=Math.max(2,m);
+var xr=(W-padL-50)*0.92,yr=(H-padB-40);
+function X(t){return padL+(t/vMs)*xr;}
+function Y(mm){return H-padB-((mm-1)/(vM-1))*yr;}
+var pts=[],N=60;
+for(var k=0;k<=N;k++){var t=ms*k/N;pts.push([X(t),Y(Math.exp(RATE*t))]);}
+var ex=pts[N][0],ey=pts[N][1]+(ph==='flying'?Math.sin(now/250)*3:0);
+ctx.beginPath();ctx.moveTo(padL,H-padB);
+for(var k2=0;k2<=N;k2++)ctx.lineTo(pts[k2][0],pts[k2][1]);
+ctx.lineTo(ex,H-padB);ctx.closePath();ctx.fillStyle='rgba(229,5,57,0.30)';ctx.fill();
+ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+for(var k3=1;k3<=N;k3++)ctx.lineTo(pts[k3][0],pts[k3][1]);
+ctx.strokeStyle='#e50539';ctx.lineWidth=4;ctx.stroke();
+var a=Math.atan2(pts[N][1]-pts[N-3][1],pts[N][0]-pts[N-3][0]);a=Math.max(-0.9,Math.min(0.1,a));
+var px=ex,py=ey;
+if(ph==='crashed'){var off=Math.min((now-crashT)*0.6,W);px+=off;py-=off*0.35;}
+if(px<W+40)plane(px,py,a);
+}else{
+plane(34,H-26,-0.25);
+}
+/* overlay */
+var om=$('ovm'),ob=$('ovb'),bar=$('ovbar');
+if(!S){om.textContent='';ob.textContent='';bar.style.display='none';}
+else if(ph==='betting'){om.textContent='WAITING FOR NEXT ROUND';ob.textContent='';bar.style.display='block';$('ovi').style.width=Math.max(0,Math.min(100,(betEnd-now)/8000*100))+'%';}
+else if(ph==='flying'){om.textContent='';ob.textContent=fmt(m)+'x';ob.style.color='#fff';bar.style.display='none';}
+else{om.textContent='FLEW AWAY!';om.style.color='#fff';ob.textContent=fmt(m)+'x';ob.style.color='#e50539';bar.style.display='none';}
+if(ph!=='crashed')om.style.color='#ddd';
+P.forEach(updPanel);
+requestAnimationFrame(draw);
+}
+
+$('back').onclick=function(){location.href='index.html';};
+mk(0);mk(1);
+window.addEventListener('resize',resize);
+resize();poll();setInterval(poll,300);requestAnimationFrame(draw);
+</script>
+</body></html>
