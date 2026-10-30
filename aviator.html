@@ -35,8 +35,9 @@ canvas{width:100%;height:100%;display:block}
 .q{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px}
 .q button{background:#2c2d30;border:0;color:#bbb;border-radius:6px;padding:5px;font-size:13px}
 .go{width:42%;border:2px solid #5fd33a;border-radius:12px;font-weight:800;font-size:15px;color:#fff;background:#28a909}
-.go.cash{background:#e50539;border-color:#ff6b8a}
+.go.cash{background:#d07206;border-color:#ffa53a}
 .go.wait{background:#555;border-color:#777;font-size:13px}
+.go.placed{background:#e50539;border-color:#ff6b8a;font-size:14px}
 .auto{display:none;margin-top:6px;font-size:13px;color:#aaa}
 .auto input{width:70px;background:#000;border:1px solid #444;color:#fff;border-radius:6px;padding:4px;margin-left:6px}
 #toast{position:fixed;left:50%;top:60px;transform:translateX(-50%);background:#333;padding:8px 14px;border-radius:8px;font-size:14px;display:none;z-index:9;max-width:90%;text-align:center}
@@ -225,7 +226,7 @@ p.amt.textContent=fmt(STAKES[p.idx]);
 if(!S){t='...';c='go wait';}
 else if(ph==='flying'&&my&&!my.cashed){t='Cash out '+fmt(Math.floor(my.amount*m*100)/100)+' ብር';c='go cash';}
 else if(my&&my.cashed){t='አሸንፈዋል '+fmt(my.win)+' ብር';c='go wait';}
-else if(my&&ph==='betting'){t='ተወራርዷል '+my.amount+' ብር';c='go wait';}
+else if(my&&ph==='betting'){t='ተወራርዷል '+my.amount+' ብር';c='go placed';}
 else if(my&&ph==='crashed'){t='ተሸንፈዋል';c='go wait';}
 else if(ph==='betting'){t='Bet '+fmt(STAKES[p.idx])+' ብር';c='go';}
 else{t='ቀጣዩን ዙር ይጠብቁ';c='go wait';}
