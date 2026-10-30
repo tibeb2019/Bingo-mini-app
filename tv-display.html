@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spin Win — TV Display</title>
+<style>
+  :root{
+    --bg1:#123a24; --bg2:#0d2e1c; --bg3:#081c12;
+    --gold:#e8c15c; --gold-dim:#8a6d1f;
+    --red:#a2170f; --red2:#7c0f09;
+    --text:#f4ede0; --text-dim:#b7ab8f;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;font-family:'Segoe UI',system-ui,sans-serif;}
+  body{
+    background:
+      radial-gradient(circle at 20% 0%, #1f5c38 0%, transparent 55%),
+      radial-gradient(circle at 100% 100%, #0d2e1c 0%, transparent 50%),
+      linear-gradient(180deg, var(--bg1), var(--bg3));
+    color:var(--text); min-height:100vh; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .wrap{width:100%; max-width:900px; padding:24px; text-align:center;}
+
+  .topbar{display:flex; align-items:center; justify-content:center; gap:22px; margin-bottom:22px;}
+  .logo{width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#ffd76b,#e0501f);
+    display:flex;align-items:center;justify-content:center;font-weight:800;color:#2b1140;font-size:30px;
+    box-shadow:0 0 0 3px var(--gold), 0 6px 16px rgba(0,0,0,.4);}
+  .brand{font-size:38px;font-weight:800;letter-spacing:.6px; font-family:Georgia,'Times New Roman',serif;}
+  .brand span{color:var(--gold);}
+
+  .player-count{display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.06);
+    border:1px solid var(--gold-dim); border-radius:30px; padding:10px 22px;}
+  .player-count .pc-dot{width:11px; height:11px; border-radius:50%; background:#18b673;
+    box-shadow:0 0 8px #18b673; animation:pcPulse 1.4s infinite;}
+  .player-count .pc-num{font-size:22px; font-weight:800; color:var(--gold); white-space:nowrap;}
+  .player-count .pc-label{font-size:13px; color:var(--text-dim); font-weight:700;}
+  @keyframes pcPulse{0%,100%{opacity:1;} 50%{opacity:.35;}}
+
+  #wheel-wrapper{position:relative; width:440px; height:440px; margin:10px auto 18px;
+    filter:drop-shadow(0 18px 30px rgba(0,0,0,.55));}
+  #wheel-bezel{position:absolute; inset:-14px; border-radius:50%;
+    background:conic-gradient(from 0deg, #fff8dc, #c99b1f, #fff8dc, #8a6d1f, #fff8dc, #c99b1f, #fff8dc);
+    box-shadow:inset 0 0 0 4px rgba(0,0,0,.35), 0 0 0 2px rgba(0,0,0,.4);}
+  #wheel-bezel::after{content:''; position:absolute; inset:12px; border-radius:50%;
+    background:radial-gradient(circle at 35% 25%, #2a2a2a, #0a0a0a 70%);}
+  #pointer{position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:0; height:0;
+    border-left:16px solid transparent; border-right:16px solid transparent; border-top:28px solid var(--gold); z-index:7;
+    filter:drop-shadow(0 4px 6px rgba(0,0,0,.6));}
+  #wheel-container{width:440px; height:440px; border-radius:50%; position:relative;
+    transition:transform 9.6s cubic-bezier(0.10,0.68,0.08,1); overflow:hidden;
+    box-shadow:inset 0 0 30px rgba(0,0,0,.65), inset 0 0 0 2px rgba(0,0,0,.5);}
+  #wheel-container svg{width:100%; height:100%; display:block;}
+  #hub{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:126px; height:126px;
+    background:radial-gradient(circle at 35% 28%,#5a6fd8,#2438a8 55%,#141d5e); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; flex-direction:column; z-index:4;
+    box-shadow:0 0 0 6px #d9c98a, 0 0 0 9px rgba(0,0,0,.5), inset 0 4px 10px rgba(255,255,255,.25), inset 0 -8px 14px rgba(0,0,0,.5);}
+  #hub .htxt{font-weight:900; color:#fff; font-size:19px; letter-spacing:.5px; line-height:1.25; text-align:center;
+    text-shadow:0 1px 2px rgba(0,0,0,.6);}
+
+  .timer-badge{position:absolute; top:-6px; right:-6px; z-index:9; width:86px; height:86px; border-radius:50%;
+    background:radial-gradient(circle at 35% 28%, #1f5c38, #0d2416); border:3px solid var(--gold);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    box-shadow:0 6px 16px rgba(0,0,0,.5);}
+  .timer-badge .tb-count{font-size:28px; font-weight:900; color:var(--gold); line-height:1;}
+  .timer-badge .tb-label{font-size:11px; color:var(--text-dim); font-weight:700; margin-top:2px;}
+  .timer-badge.spinning{border-color:#18b673;}
+  .timer-badge.spinning .tb-count{color:#18b673;}
+
+  .result-line{min-height:44px; text-align:center; font-weight:800; font-size:26px; margin-bottom:14px;}
+
+  .history-corner{width:100%; margin:0 auto;
+    background:linear-gradient(160deg,#173d27,#0d2416); border:1px solid var(--gold-dim); border-radius:14px;
+    padding:14px 18px; box-shadow:0 6px 16px rgba(0,0,0,.4); max-width:640px;}
+  .hc-title{font-size:15px; color:var(--text-dim); font-weight:700; margin-bottom:10px;}
+  .history-strip{display:flex; flex-wrap:wrap; gap:10px; justify-content:center;}
+  .hist-chip{width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:17px; font-weight:900; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.25);}
+  .hist-chip.red{background:linear-gradient(160deg,var(--red),var(--red2));}
+  .hist-chip.black{background:linear-gradient(160deg,#2a2a2a,#111);}
+  .hist-chip.green{background:linear-gradient(160deg,#1fae74,#128c5c);}
+  .hist-empty{font-size:15px; color:var(--text-dim);}
+
+  .conn-note{margin-top:14px; font-size:12px; color:var(--text-dim);}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="logo">S</div>
+    <div class="brand">Spin <span>Win</span></div>
+    <div class="player-count">
+      <span class="pc-dot"></span>
+      <div>
+        <div class="pc-num" id="playerCountNum">10,000+</div>
+        <div class="pc-label">ተጫዋቾች</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="wheel-wrapper">
+    <div id="wheel-bezel"></div>
+    <div id="pointer"></div>
+    <div id="wheel-container">
+      <svg id="wheel-svg" viewBox="0 0 300 300"></svg>
+    </div>
+    <div id="hub"><div class="htxt">SPIN<br>WIN</div></div>
+    <div class="timer-badge" id="timerBadge">
+      <div class="tb-count" id="rtCount">40</div>
+      <div class="tb-label" id="rtLabel">ውርርድ</div>
+    </div>
+  </div>
+
+  <div class="result-line" id="resultLine"></div>
+
+  <div class="history-corner">
+    <div class="hc-title">የወጡ ቁጥሮች</div>
+    <div class="history-strip" id="historyStrip"><span class="hist-empty">በመጠባበቅ ላይ…</span></div>
+  </div>
+
+  <div class="conn-note" id="connNote"></div>
+</div>
+
+<script>
+/* ---------- timing constants: must match server.js ---------- */
+const BET_LENGTH = 40;
+const SPIN_LENGTH = 10;
+const CYCLE_LENGTH = BET_LENGTH + SPIN_LENGTH; // = server's ROUND_LENGTH
+const HISTORY_MAX = 12;
+let resultHistory = [];
+let spinning = false;
+let lastHandledRound = null;
+
+/* ---------- roulette colours ---------- */
+const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+function colorFor(n){ if(n===0) return 'green'; return RED_NUMBERS.has(n) ? 'red' : 'black'; }
+
+/* ---------- DEMO player counter (display only, matches original look) ---------- */
+let currentPlayerCount = 10247;
+function randomizePlayerCount(){
+  const delta = Math.floor(Math.random() * 240) - 100;
+  currentPlayerCount = Math.max(10000, currentPlayerCount + delta);
+  document.getElementById('playerCountNum').textContent = currentPlayerCount.toLocaleString('en-US');
+}
+randomizePlayerCount();
+
+/* ---------- wheel drawing ---------- */
+const WHEEL_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+const svg = document.getElementById('wheel-svg');
+const CX=150, CY=150, R=148;
+const segAngle = 360 / WHEEL_ORDER.length;
+function polar(cx,cy,r,angleDeg){ const rad=(angleDeg-90)*Math.PI/180; return {x:cx+r*Math.cos(rad), y:cy+r*Math.sin(rad)}; }
+const svgNS = "http://www.w3.org/2000/svg";
+function hexFor(n){ const c=colorFor(n); return c==='green' ? '#18b673' : c==='red' ? '#d81e05' : '#0d0d0d'; }
+const INNER_R = R*0.42;
+WHEEL_ORDER.forEach((num,i)=>{
+  const startAngle=i*segAngle, endAngle=startAngle+segAngle;
+  const mid=startAngle+segAngle/2;
+  const po1=polar(CX,CY,R,startAngle), po2=polar(CX,CY,R,endAngle);
+  const pi1=polar(CX,CY,INNER_R,endAngle), pi2=polar(CX,CY,INNER_R,startAngle);
+  const largeArc = segAngle>180 ? 1:0;
+  const path=document.createElementNS(svgNS,"path");
+  path.setAttribute("d",
+    `M${po1.x},${po1.y} A${R},${R} 0 ${largeArc} 1 ${po2.x},${po2.y} L${pi1.x},${pi1.y} A${INNER_R},${INNER_R} 0 ${largeArc} 0 ${pi2.x},${pi2.y} Z`);
+  path.setAttribute("fill", hexFor(num));
+  path.setAttribute("stroke", "#0a0714");
+  path.setAttribute("stroke-width", "1.5");
+  svg.appendChild(path);
+
+  const labelPos=polar(CX,CY,R*0.90,mid);
+  const text=document.createElementNS(svgNS,"text");
+  text.setAttribute("x", labelPos.x); text.setAttribute("y", labelPos.y);
+  text.setAttribute("fill","#ffffff"); text.setAttribute("font-size","14"); text.setAttribute("font-weight","900");
+  text.setAttribute("text-anchor","middle"); text.setAttribute("dominant-baseline","middle");
+  text.setAttribute("transform", `rotate(${mid}, ${labelPos.x}, ${labelPos.y})`);
+  text.textContent = num;
+  svg.appendChild(text);
+});
+const hubRing=document.createElementNS(svgNS,"circle");
+hubRing.setAttribute("cx",CX); hubRing.setAttribute("cy",CY); hubRing.setAttribute("r",INNER_R);
+hubRing.setAttribute("fill","#0a0714");
+svg.insertBefore(hubRing, svg.firstChild);
+
+/* ---------- synchronized round clock (same math as the player app) ---------- */
+let currentRotation = 0;
+function roundIdNow(){ return Math.floor(Date.now()/1000 / CYCLE_LENGTH); }
+function cyclePosNow(){ return Math.floor(Date.now()/1000) % CYCLE_LENGTH; }
+function isSpinPhase(pos){ return pos >= BET_LENGTH; }
+
+function renderHistory(){
+  const strip = document.getElementById('historyStrip');
+  if (!resultHistory.length){
+    strip.innerHTML = '<span class="hist-empty">በመጠባበቅ ላይ…</span>';
+    return;
+  }
+  strip.innerHTML = '';
+  resultHistory.forEach(r=>{
+    const chip = document.createElement('div');
+    chip.className = 'hist-chip ' + r.color;
+    chip.textContent = r.number;
+    strip.appendChild(chip);
+  });
+}
+
+async function fetchRoundResultWithRetry(roundId, maxAttempts){
+  for (let attempt = 0; attempt < maxAttempts; attempt++){
+    try{
+      const resp = await fetch(`/api/public/round-result?round=${roundId}`);
+      const data = await resp.json();
+      if (resp.ok && data && typeof data.winning_number === 'number'){
+        document.getElementById('connNote').textContent = '';
+        return data;
+      }
+      /*
+        Server clock ትንሽ ወደ ኋላ ከሆነ (ገና round "አልተጠናቀቀም" ቢል)
+        2 ሰከንድ ጠብቀን በድጋሚ እንሞክራለን።
+      */
+      document.getElementById('connNote').textContent = 'ውጤቱን በመጠባበቅ ላይ...';
+      await new Promise(r => setTimeout(r, 2000));
+    }catch(e){
+      document.getElementById('connNote').textContent = 'ከሰርቨሩ ጋር መገናኘት አልተቻለም — እንደገና በመሞከር ላይ...';
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  return null;
+}
+
+async function showRoundResult(roundId){
+  spinning = true;
+  document.getElementById('timerBadge').classList.add('spinning');
+  document.getElementById('rtLabel').textContent = 'ዙር...';
+
+  const data = await fetchRoundResultWithRetry(roundId, 8);
+
+  if (!data){
+    document.getElementById('connNote').textContent = 'ውጤቱን ማምጣት አልተቻለም';
+    spinning = false;
+    document.getElementById('timerBadge').classList.remove('spinning');
+    document.getElementById('rtLabel').textContent = 'ውርርድ';
+    return;
+  }
+  document.getElementById('connNote').textContent = '';
+
+  const winningNumber = data.winning_number;
+  const winningIndex = WHEEL_ORDER.indexOf(winningNumber);
+  const targetAngle = winningIndex * segAngle + segAngle/2;
+  const fullSpins = 8 * 360;
+  const finalRotation = fullSpins - targetAngle;
+  currentRotation += finalRotation - (currentRotation % 360);
+
+  const wheel = document.getElementById('wheel-container');
+  wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+  setTimeout(()=>{
+    spinning = false;
+    document.getElementById('timerBadge').classList.remove('spinning');
+    document.getElementById('rtLabel').textContent = 'ውርርድ';
+
+    const line = document.getElementById('resultLine');
+    const colorLabel = data.winning_color === 'red' ? 'ቀይ' : data.winning_color === 'black' ? 'ጥቁር' : 'አረንጓዴ';
+    line.textContent = `🎯 ${winningNumber} (${colorLabel}) ወጣ!`;
+
+    resultHistory.unshift({ number: winningNumber, color: data.winning_color });
+    if (resultHistory.length > HISTORY_MAX) resultHistory.length = HISTORY_MAX;
+    renderHistory();
+  }, SPIN_LENGTH * 1000);
+}
+
+let lastCycleId = null;
+let lastPhase = null;
+
+function tickRoundClock(){
+  const cid = roundIdNow();
+  const pos = cyclePosNow();
+  const phase = isSpinPhase(pos) ? 'spin' : 'bet';
+
+  if (lastCycleId === null){ lastCycleId = cid; lastPhase = phase; }
+
+  if (phase === 'spin' && lastPhase === 'bet' && lastHandledRound !== cid){
+    lastHandledRound = cid;
+    showRoundResult(cid);
+  }
+  if (phase === 'bet' && cid !== lastCycleId){
+    randomizePlayerCount();
+  }
+  lastPhase = phase;
+  lastCycleId = cid;
+
+  if (phase === 'bet'){
+    document.getElementById('rtCount').textContent = BET_LENGTH - pos;
+  } else {
+    document.getElementById('rtCount').textContent = CYCLE_LENGTH - pos;
+  }
+}
+tickRoundClock();
+setInterval(tickRoundClock, 1000);
+</script>
+</body>
+</html>

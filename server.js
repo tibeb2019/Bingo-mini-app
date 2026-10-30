@@ -2889,6 +2889,78 @@ app.get(
 );
 
 /* =========================================================
+   PUBLIC ROUND RESULT (ለ TV / ማሳያ ብቻ — user login አያስፈልገውም)
+   ✅ አዲስ፦ ይህ endpoint initData ወይም ticket ሳያስፈልገው
+   የ round ውጤት (ቁጥር + ቀለም) ብቻ ይመልሳል፣ ለ TV ማሳያ ገጽ
+   (tv-display.html) ጥቅም ላይ ይውላል።
+========================================================= */
+
+app.get(
+  '/api/public/round-result',
+  async function (req, res) {
+    try {
+      const round =
+        Number(req.query.round);
+
+      if (!Number.isInteger(round)) {
+        return res.status(400).json({
+          error:
+            'invalid round'
+        });
+      }
+
+      /*
+        Current round ገና ካልተጠናቀቀ ውጤት አንፈጥርም
+        (ልክ እንደ admin/round-result አይነት ጥበቃ)
+      */
+      if (
+        round === currentRoundId() &&
+        !isRoundFinished(round)
+      ) {
+        return res.status(425).json({
+          error:
+            'round not finished yet',
+
+          round,
+
+          bet_close_unix:
+            getRoundTiming(round)
+              .betCloseUnix
+        });
+      }
+
+      const result =
+        await resolveRound(round);
+
+      return res.json({
+        success: true,
+
+        round,
+
+        winning_number:
+          Number(
+            result.winning_number
+          ),
+
+        winning_color:
+          result.winning_color
+      });
+    } catch (err) {
+      console.error(
+        'public/round-result error:',
+        err
+      );
+
+      return res.status(500).json({
+        error:
+          err.message ||
+          'failed to load round result'
+      });
+    }
+  }
+);
+
+/* =========================================================
    DEPOSIT REQUEST
    ✅ ተስተካክሏል፦ ከ Mini App (initData) ወይም ከ bot text command
    (userId በቀጥታ) ሁለቱም ምንጮች ጥያቄ መቀበል ይችላል።
