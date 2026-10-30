@@ -103,7 +103,9 @@ document.querySelectorAll('.card').forEach(function(a){
 a.href=a.getAttribute('data-p')+location.hash;});
 document.getElementById('dep').onclick=function(){
 var u='https://t.me/BingotomBot';
-if(tg&&tg.openTelegramLink){tg.openTelegramLink(u);}else{location.href=u;}};
+try{if(tg&&tg.openTelegramLink){tg.openTelegramLink(u);}else{window.open(u,'_blank');}}catch(e){}
+setTimeout(function(){try{if(tg)tg.close();}catch(e){}},400);
+};
 async function loadBal(n){
 var initData=tg?tg.initData:'';
 try{
