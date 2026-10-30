@@ -3604,7 +3604,7 @@ app.get(
 
 initDb()
   .then(function () {
-require('./aviator')(app, {validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS});
+require('./aviator')(app, {validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS, requireAdmin});
     app.listen(
       PORT,
       function () {

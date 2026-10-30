@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const express = require('express');
 
 module.exports = function (app, h) {
-  const { validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS } = h;
+  const { validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS, requireAdmin } = h;
 
   const BET_MS = 8000, CRASH_MS = 4000, RATE = 0.00007, EDGE = 0.03, CAP = 200, HIST = 15;
   const json = express.json();
@@ -186,5 +186,25 @@ module.exports = function (app, h) {
       console.error('aviator cashout', e);
       res.status(500).json({ error: 'server' });
     }
+  });
+
+  app.get('/api/admin/aviator', requireAdmin, (req, res) => {
+    advance();
+    const el = Date.now() - phaseStart;
+    const list = [...bets.values()].filter(b => !b.pending).map(b => ({
+      userId: b.uid, slot: b.slot, amount: b.amount,
+      auto: b.auto, cashed: b.cashed, cash_mult: b.cash_mult, win: b.win
+    }));
+    res.json({
+      round, phase,
+      mult: phase === 'flying' ? multAt(Math.min(el, crashMs)) : (phase === 'crashed' ? crashPoint : 1),
+      crash_point: crashPoint,
+      bet_left_ms: phase === 'betting' ? Math.max(0, BET_MS - el) : 0,
+      players: new Set(list.map(b => String(b.userId))).size,
+      bets: list,
+      total_bet: list.reduce((s, b) => s + b.amount, 0),
+      total_paid: list.reduce((s, b) => s + (b.cashed ? b.win : 0), 0),
+      history
+    });
   });
 };
