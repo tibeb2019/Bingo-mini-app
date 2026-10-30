@@ -1,339 +1,190 @@
 'use strict';
 const crypto = require('crypto');
+const express = require('express');
 
-const BET_MS = 8000;
-const CRASH_PAUSE_MS = 4000;
-const K = 0.00007;
-const HOUSE_EDGE = 0.03;
-const MAX_CRASH = 200;
-const HISTORY_MAX = 15;
+module.exports = function (app, h) {
+  const { validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS } = h;
 
-module.exports = function mountAviator(app, deps) {
-  const {
-    validateInitData, getBalance, deductIfSufficient,
-    changeBalance, touch, logActivity, STAKE_OPTIONS
-  } = deps;
+  const BET_MS = 8000, CRASH_MS = 4000, RATE = 0.00007, EDGE = 0.03, CAP = 200, HIST = 15;
+  const json = express.json();
 
-  /* ---------- math ---------- */
-  function multAt(ms) {
-    if (ms <= 0) return 1;
-    return Math.max(1, Math.floor(Math.exp(K * ms) * 100) / 100);
-  }
-  function msFor(mult) {
-    return Math.ceil(Math.log(mult) / K);
-  }
-  function genCrash() {
-    const R = 1099511627776; // 2^40
-    const u = crypto.randomInt(0, R) / R;
-    const raw = (1 - HOUSE_EDGE) / (1 - u);
-    let c = Math.floor(raw * 100) / 100;
-    if (c < 1) c = 1;
-    if (c > MAX_CRASH) c = MAX_CRASH;
-    return c;
-  }
-  function parseAuto(v) {
-    const n = Number(v);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    return Math.min(MAX_CRASH, Math.max(1.01, Math.round(n * 100) / 100));
-  }
-  function fail(res, status, code, msg) {
-    return res.status(status).json({ error: msg, code: code });
-  }
-
-  /* ---------- round state (in memory) ---------- */
-  let roundSeq = Math.floor(Date.now() / 1000);
-  let cur = null;
+  let round = 0, phase = 'betting', phaseStart = Date.now();
+  let crashPoint = 1, crashMs = 0;
+  let bets = new Map();
   const history = [];
 
-  function newRound(betStart) {
-    const crash = genCrash();
-    cur = {
-      id: ++roundSeq,
-      phase: 'betting',
-      betStart: betStart,
-      betEnd: betStart + BET_MS,
-      flyStart: null,
-      crashPoint: crash,
-      crashMs: msFor(crash),
-      crashedAt: null,
-      bets: new Map()
-    };
+  const multAt = ms => Math.floor(Math.exp(RATE * ms) * 100) / 100;
+  const safe = fn => { try { Promise.resolve(fn()).catch(() => {}); } catch (e) {} };
+
+  function genCrash() {
+    const r = crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656;
+    let c = Math.floor(((1 - EDGE) / (1 - r)) * 100) / 100;
+    if (!(c >= 1)) c = 1;
+    return Math.min(c, CAP);
   }
 
-  async function creditWin(b, roundId) {
-    for (let i = 0; i < 3; i++) {
-      try {
-        await changeBalance(b.userId, b.win);
-        b.paid = true;
-        try {
-          logActivity({
-            type: 'aviator_cashout', userId: b.userId, name: b.name,
-            amount: b.amount, win: b.win, mult: b.cashMult,
-            slot: b.slot, round: roundId
-          });
-        } catch (e) { /* ignore */ }
-        return true;
-      } catch (err) {
-        console.error('aviator credit retry', i + 1, err);
-      }
+  function newRound(ts) {
+    round++;
+    phase = 'betting';
+    phaseStart = ts || Date.now();
+    crashPoint = genCrash();
+    crashMs = Math.ceil(Math.log(crashPoint) / RATE);
+    bets = new Map();
+  }
+
+  // mark cashed synchronously, then pay
+  function settle(b, mult) {
+    b.cashed = true;
+    b.cash_mult = mult;
+    b.win = Math.floor(b.amount * mult * 100) / 100;
+    return (async () => {
+      try { await changeBalance(b.uid, b.win); }
+      catch (e) { console.error('aviator payout failed', b.uid, b.win, e); }
+    })();
+  }
+
+  function autoCash(limit, strict) {
+    for (const b of bets.values()) {
+      if (b.pending || b.cashed || !b.auto) continue;
+      if (strict ? b.auto < limit : b.auto <= limit) settle(b, b.auto);
     }
-    console.error('AVIATOR CREDIT FAILED', b.userId, b.win, roundId);
-    return false;
   }
 
-  function settleAutos(r, el) {
-    r.bets.forEach(function (b) {
-      if (!b.ready || b.cashed || !b.auto) return;
-      const am = msFor(b.auto);
-      if (am <= el && am < r.crashMs) {
-        // mark synchronously BEFORE any await
-        b.cashed = true;
-        b.cashMult = b.auto;
-        b.win = Math.floor(b.amount * b.auto * 100) / 100;
-        creditWin(b, r.id).catch(function () {});
-      }
-    });
-  }
-
-  function advance(now) {
-    for (let i = 0; i < 10; i++) {
-      const r = cur;
-      if (r.phase === 'betting') {
-        if (now < r.betEnd) return;
-        r.phase = 'flying';
-        r.flyStart = r.betEnd;
-      }
-      if (r.phase === 'flying') {
-        const el = now - r.flyStart;
-        settleAutos(r, el);
-        if (el < r.crashMs) return;
-        r.phase = 'crashed';
-        r.crashedAt = r.flyStart + r.crashMs;
-        history.unshift(r.crashPoint);
-        if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
-      }
-      if (r.phase === 'crashed') {
-        const nextStart = r.crashedAt + CRASH_PAUSE_MS;
-        if (now < nextStart) return;
-        newRound(now - nextStart > 1000 ? now : nextStart);
-        continue;
+  function advance() {
+    for (let i = 0; i < 6; i++) {
+      const el = Date.now() - phaseStart;
+      if (phase === 'betting') {
+        if (el < BET_MS) return;
+        phase = 'flying';
+        phaseStart += BET_MS;
+      } else if (phase === 'flying') {
+        if (el < crashMs) { autoCash(multAt(el), false); return; }
+        autoCash(crashPoint, true);
+        phase = 'crashed';
+        phaseStart += crashMs;
+        history.unshift(crashPoint);
+        if (history.length > HIST) history.pop();
+      } else {
+        if (el < CRASH_MS) return;
+        newRound(phaseStart + CRASH_MS);
       }
     }
   }
 
-  newRound(Date.now());
-  setInterval(function () {
-    try { advance(Date.now()); } catch (e) { console.error('aviator tick', e); }
-  }, 100);
+  newRound();
+  setInterval(advance, 100);
 
-  /* ---------- GET state ---------- */
-  app.get('/api/aviator/state', async function (req, res) {
+  async function auth(initData) {
+    if (!initData) return null;
     try {
-      const user = validateInitData(req.query.initData || '');
-      if (!user) return fail(res, 401, 'auth', 'invalid initData');
+      const u = await validateInitData(initData);
+      return u && u.id ? u : null;
+    } catch (e) { return null; }
+  }
 
-      const now = Date.now();
-      advance(now);
-      const r = cur;
+  const bad = (res, error, extra) => res.status(400).json(Object.assign({ error }, extra || {}));
 
-      let flyingMs = 0;
-      let mult = 1;
-      if (r.phase === 'flying') {
-        flyingMs = now - r.flyStart;
-        mult = Math.min(multAt(flyingMs), r.crashPoint);
-      } else if (r.phase === 'crashed') {
-        flyingMs = r.crashMs;
-        mult = r.crashPoint;
-      }
-
-      const myBets = [];
-      [0, 1].forEach(function (slot) {
-        const b = r.bets.get(user.id + ':' + slot);
-        if (b && b.ready) {
-          myBets.push({
-            slot: slot,
-            amount: b.amount,
-            auto: b.auto,
-            cashed: b.cashed,
-            cash_mult: b.cashMult,
-            win: b.win
-          });
-        }
-      });
-
-      const players = new Set();
-      r.bets.forEach(function (b) {
-        if (b.ready) players.add(b.userId);
-      });
-
-      touch(user.id, user.first_name);
-      const balance = await getBalance(user.id);
-
+  app.get('/api/aviator/state', async (req, res) => {
+    try {
+      const u = await auth(req.query.initData);
+      if (!u) return res.status(401).json({ error: 'auth' });
+      advance();
+      const el = Date.now() - phaseStart;
       const out = {
-        success: true,
-        round: r.id,
-        phase: r.phase,
-        bet_left_ms: r.phase === 'betting' ? Math.max(0, r.betEnd - now) : 0,
-        flying_ms: flyingMs,
-        mult: mult,
-        history: history.slice(0, HISTORY_MAX),
-        my_bets: myBets,
-        players: players.size,
-        balance: Number(balance)
+        round, phase, rate: RATE, stakes: STAKE_OPTIONS, history,
+        bet_left_ms: 0, flying_ms: 0, mult: 1
       };
-      if (r.phase === 'crashed') {
-        out.crash_point = r.crashPoint;
-        out.next_in_ms = Math.max(0, r.crashedAt + CRASH_PAUSE_MS - now);
-      }
-      return res.json(out);
-    } catch (err) {
-      console.error('aviator state error:', err);
-      return res.status(500).json({ error: 'failed to load state' });
+      if (phase === 'betting') out.bet_left_ms = Math.max(0, BET_MS - el);
+      else if (phase === 'flying') { out.flying_ms = el; out.mult = multAt(Math.min(el, crashMs)); }
+      else { out.mult = crashPoint; out.crash = crashPoint; }
+
+      const uids = new Set();
+      let cnt = 0;
+      for (const b of bets.values()) { if (!b.pending) { uids.add(String(b.uid)); cnt++; } }
+      out.players = uids.size;
+      out.bets_count = cnt;
+
+      out.my_bets = [0, 1].map(s => {
+        const b = bets.get(u.id + ':' + s);
+        if (!b) return null;
+        return { amount: b.amount, auto: b.auto, cashed: b.cashed, cash_mult: b.cash_mult, win: b.win };
+      });
+      out.balance = await getBalance(u.id);
+      res.json(out);
+    } catch (e) {
+      console.error('aviator state', e);
+      res.status(500).json({ error: 'server' });
     }
   });
 
-  /* ---------- POST bet ---------- */
-  app.post('/api/aviator/bet', async function (req, res) {
+  app.post('/api/aviator/bet', json, async (req, res) => {
     try {
-      const user = validateInitData(req.body.initData);
-      if (!user) return fail(res, 401, 'auth', 'invalid initData');
-
-      const slot = Number(req.body.slot);
-      if (slot !== 0 && slot !== 1) {
-        return fail(res, 400, 'slot', 'ልክ ያልሆነ ቦታ');
+      const p = req.body || {};
+      const u = await auth(p.initData);
+      if (!u) return res.status(401).json({ error: 'auth' });
+      const slot = Number(p.slot);
+      if (slot !== 0 && slot !== 1) return bad(res, 'slot');
+      const amount = Number(p.amount);
+      if (!STAKE_OPTIONS.includes(amount)) return bad(res, 'amount');
+      let auto = null;
+      if (p.auto !== null && p.auto !== undefined && p.auto !== '') {
+        auto = Math.round(Number(p.auto) * 100) / 100;
+        if (!(auto >= 1.01 && auto <= CAP)) return bad(res, 'auto');
       }
-      const amount = Number(req.body.amount);
-      if (!Number.isFinite(amount) || STAKE_OPTIONS.indexOf(amount) === -1) {
-        return fail(res, 400, 'amount', 'ልክ ያልሆነ መጠን');
-      }
-      const auto = parseAuto(req.body.auto);
+      advance();
+      if (phase !== 'betting') return bad(res, 'closed');
+      const key = u.id + ':' + slot;
+      if (bets.has(key)) return bad(res, 'already');
 
-      const now = Date.now();
-      advance(now);
-      const r = cur;
-      if (r.phase !== 'betting' || now >= r.betEnd) {
-        return fail(res, 400, 'closed', 'ውርርድ ተዘግቷል');
-      }
+      const myRound = round;
+      const bet = { uid: u.id, slot, amount, auto, cashed: false, cash_mult: 0, win: 0, pending: true };
+      bets.set(key, bet); // reserve slot BEFORE awaiting
 
-      const key = user.id + ':' + slot;
-      if (r.bets.has(key)) {
-        return fail(res, 409, 'dup', 'በዚህ ቦታ ቀድሞ ተወራርደዋል');
-      }
-
-      const bet = {
-        userId: String(user.id),
-        name: user.first_name || null,
-        slot: slot,
-        amount: amount,
-        auto: auto,
-        ready: false,
-        cashed: false,
-        cashMult: null,
-        win: 0,
-        paid: false
-      };
-
-      // reserve the slot synchronously BEFORE any await
-      r.bets.set(key, bet);
-
-      let ded;
-      try {
-        ded = await deductIfSufficient(user.id, amount);
-      } catch (e) {
-        r.bets.delete(key);
-        throw e;
-      }
-      if (!ded.ok) {
-        r.bets.delete(key);
-        return res.status(400).json({
-          error: 'በቂ ቀሪ ሂሳብ የለም',
-          code: 'balance',
-          balance: Number(ded.balance)
-        });
+      let r;
+      try { r = await deductIfSufficient(u.id, amount); }
+      catch (e) { if (bets.get(key) === bet) bets.delete(key); throw e; }
+      if (!r || !r.ok) {
+        if (bets.get(key) === bet) bets.delete(key);
+        return bad(res, 'balance', { balance: r && r.balance });
       }
 
-      // round may have started while we awaited -> refund
-      advance(Date.now());
-      if (cur !== r || r.phase !== 'betting') {
-        r.bets.delete(key);
-        try {
-          await changeBalance(user.id, amount);
-        } catch (e) {
-          console.error('AVIATOR REFUND FAILED', user.id, amount, e);
-        }
-        return fail(res, 400, 'closed', 'ውርርድ ተዘግቷል');
+      advance();
+      if (round !== myRound || phase !== 'betting' || bets.get(key) !== bet) {
+        await changeBalance(u.id, amount); // refund: round already started
+        if (bets.get(key) === bet) bets.delete(key);
+        return bad(res, 'closed', { balance: await getBalance(u.id) });
       }
-
-      bet.ready = true;
-
-      touch(user.id, user.first_name);
-      logActivity({
-        type: 'aviator_bet', userId: user.id, name: user.first_name || null,
-        amount: amount, auto: auto, slot: slot, round: r.id
-      });
-
-      return res.json({
-        success: true,
-        round: r.id,
-        slot: slot,
-        amount: amount,
-        auto: auto,
-        balance: Number(ded.balance)
-      });
-    } catch (err) {
-      console.error('aviator bet error:', err);
-      return res.status(500).json({ error: 'failed to place bet' });
+      bet.pending = false;
+      safe(() => touch(u.id, u.first_name));
+      safe(() => logActivity(u.id, 'aviator bet ' + amount));
+      res.json({ ok: true, balance: r.balance });
+    } catch (e) {
+      console.error('aviator bet', e);
+      res.status(500).json({ error: 'server' });
     }
   });
 
-  /* ---------- POST cashout ---------- */
-  app.post('/api/aviator/cashout', async function (req, res) {
+  app.post('/api/aviator/cashout', json, async (req, res) => {
     try {
-      const user = validateInitData(req.body.initData);
-      if (!user) return fail(res, 401, 'auth', 'invalid initData');
-
-      const slot = Number(req.body.slot);
-      if (slot !== 0 && slot !== 1) {
-        return fail(res, 400, 'slot', 'ልክ ያልሆነ ቦታ');
-      }
-
-      const now = Date.now();
-      advance(now);
-      const r = cur;
-      const b = r.bets.get(user.id + ':' + slot);
-
-      if (!b || !b.ready) return fail(res, 404, 'nobet', 'ውርርድ የለም');
-      if (b.cashed) return fail(res, 409, 'done', 'ቀድሞ ወጥተዋል');
-      if (r.phase !== 'flying') return fail(res, 400, 'late', 'አውሮፕላኑ ጠፍቷል');
-
-      const el = now - r.flyStart;
-      if (el >= r.crashMs) return fail(res, 400, 'late', 'አውሮፕላኑ ጠፍቷል');
-
-      const mult = Math.min(multAt(el), r.crashPoint);
-
-      // mark cashed synchronously BEFORE awaiting the balance change
-      b.cashed = true;
-      b.cashMult = mult;
-      b.win = Math.floor(b.amount * mult * 100) / 100;
-
-      const ok = await creditWin(b, r.id);
-      if (!ok) {
-        return res.status(500).json({ error: 'failed to credit win', code: 'credit' });
-      }
-
-      touch(user.id, user.first_name);
-      const balance = await getBalance(user.id);
-
-      return res.json({
-        success: true,
-        slot: slot,
-        mult: mult,
-        win: b.win,
-        balance: Number(balance)
-      });
-    } catch (err) {
-      console.error('aviator cashout error:', err);
-      return res.status(500).json({ error: 'failed to cash out' });
+      const p = req.body || {};
+      const u = await auth(p.initData);
+      if (!u) return res.status(401).json({ error: 'auth' });
+      const slot = Number(p.slot);
+      if (slot !== 0 && slot !== 1) return bad(res, 'slot');
+      advance();
+      const b = bets.get(u.id + ':' + slot);
+      if (!b || b.pending) return bad(res, 'nobet');
+      if (b.cashed) return bad(res, 'already', { mult: b.cash_mult, win: b.win });
+      if (phase !== 'flying') return bad(res, 'notflying');
+      const el = Date.now() - phaseStart;
+      if (el >= crashMs) return bad(res, 'crashed');
+      const mult = multAt(el);
+      await settle(b, mult); // cashed flag is set synchronously inside
+      safe(() => logActivity(u.id, 'aviator win ' + b.win + ' @' + mult));
+      res.json({ mult, win: b.win, balance: await getBalance(u.id) });
+    } catch (e) {
+      console.error('aviator cashout', e);
+      res.status(500).json({ error: 'server' });
     }
   });
 };
