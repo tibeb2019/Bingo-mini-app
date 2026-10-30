@@ -1617,6 +1617,20 @@ tbody tr:hover{
 
 }
 
+
+/* =========================
+   AVIATOR PANEL
+========================= */
+.av-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:16px}
+.av-cell{background:var(--ink);border:1px solid var(--line2);padding:10px 12px}
+.av-cell .l{color:var(--dim);font-size:.62rem}
+.av-cell .v{font-family:var(--mono);font-size:1.05rem;font-weight:600;margin-top:3px}
+.av-hist{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.av-hist span{font-family:var(--mono);font-size:.72rem;padding:3px 8px;border:1px solid var(--line2);background:var(--ink)}
+.av-hist span.hi{color:var(--win2)}
+.av-hist span.lo{color:var(--loss2)}
+.av-bets{max-height:240px;overflow:auto;margin-top:14px}
+
 </style>
 
 </head>
@@ -2036,6 +2050,61 @@ tbody tr:hover{
 
     </div>
 
+
+
+    <!-- =========================
+         AVIATOR MONITOR
+    ========================= -->
+
+    <div class="panel" style="margin-bottom:16px;">
+
+      <div class="panel-head">
+        <div>
+          <h3>✈ Aviator Monitor</h3>
+          <p>Aviator ጨዋታ ቁጥጥር</p>
+        </div>
+        <span class="badge" id="avStatus">—</span>
+      </div>
+
+      <div class="ticket-body">
+
+        <div class="av-grid">
+          <div class="av-cell"><div class="l">ዙር</div><div class="v" id="avRound">—</div></div>
+          <div class="av-cell"><div class="l">Multiplier</div><div class="v" id="avMult">—</div></div>
+          <div class="av-cell"><div class="l">ተጫዋቾች</div><div class="v" id="avPlayers">—</div></div>
+          <div class="av-cell"><div class="l">ጠቅላላ ውርርድ</div><div class="v brass" id="avBet" style="color:var(--brass2)">—</div></div>
+          <div class="av-cell"><div class="l">የተከፈለ</div><div class="v" id="avPaid" style="color:var(--loss2)">—</div></div>
+          <div class="av-cell"><div class="l">የዙሩ ትርፍ</div><div class="v" id="avNet">—</div></div>
+        </div>
+
+        <div class="av-hist" id="avHist"></div>
+
+        <div class="result-control">
+          <div class="result-control-title">🎯 ከፍተኛ የበረራ ገደብ (Max multiplier)</div>
+          <div class="result-control-row">
+            <input id="avCapInput" type="number" min="1.1" max="200" step="0.1"
+                   inputmode="decimal" placeholder="1.1 - 200" autocomplete="off">
+            <button class="btn primary" id="avCapBtn">ገደብ አዘጋጅ</button>
+            <button class="btn" id="avCapResetBtn">ወደ 200 መልስ</button>
+          </div>
+          <div class="result-control-help">
+            አውሮፕላኑ በእያንዳንዱ ዙር በዘፈቀደ ይወድቃል፤ ከዚህ ገደብ በላይ ግን አይበርም።
+            አዲሱ ገደብ ከሚቀጥለው ዙር ጀምሮ ይሠራል።
+          </div>
+          <div class="current-selected" id="avCapCurrent"></div>
+        </div>
+
+        <div class="av-bets table-wrap">
+          <table>
+            <thead><tr>
+              <th>User</th><th class="right">ውርርድ</th><th class="right">Auto</th><th class="right">ውጤት</th>
+            </tr></thead>
+            <tbody id="avBetsBody"></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
 
     <!-- =========================
          ACTIVITY + USERS (side by side)
@@ -2546,7 +2615,8 @@ async function fetchAll(){
       api("/api/admin/users-report"),
       api("/api/admin/activity?limit=60"),
       api("/api/admin/current-round"),
-      api("/api/admin/preview-number")
+      api("/api/admin/preview-number"),
+      api("/api/admin/aviator").catch(function(){ return null; })
 
     ]);
 
@@ -2569,6 +2639,8 @@ async function fetchAll(){
     renderRound(round);
 
     renderPreview(preview);
+
+    renderAviator(results[5]);
 
     els.lastUpdated.textContent =
       "Last updated: " +
@@ -2882,6 +2954,90 @@ els.randomNumberBtn.addEventListener("click", async function(){
 
 });
 
+
+
+/* =========================
+   AVIATOR
+========================= */
+
+function renderAviator(av){
+
+  const st = $("avStatus");
+
+  if(!av){
+    st.textContent = "አልተገናኘም";
+    st.className = "badge";
+    return;
+  }
+
+  const phaseMap = { betting:"BETTING", flying:"FLYING", crashed:"CRASHED" };
+
+  st.textContent = phaseMap[av.phase] || av.phase;
+  st.className = "badge " + (av.phase === "flying" ? "live" : av.phase === "betting" ? "wait" : "");
+
+  $("avRound").textContent = av.round;
+  $("avMult").textContent = Number(av.mult || 1).toFixed(2) + "x";
+  $("avPlayers").textContent = fmt(av.players);
+  $("avBet").textContent = fmt(av.total_bet);
+  $("avPaid").textContent = fmt(av.total_paid);
+
+  const net = (Number(av.total_bet) || 0) - (Number(av.total_paid) || 0);
+  const netEl = $("avNet");
+  netEl.textContent = (net < 0 ? "−" : "") + fmt(Math.abs(net));
+  netEl.style.color = net >= 0 ? "var(--win2)" : "var(--loss2)";
+
+  $("avHist").innerHTML = (av.history || []).map(function(h){
+    return '<span class="' + (h >= 2 ? "hi" : "lo") + '">' + Number(h).toFixed(2) + 'x</span>';
+  }).join("");
+
+  $("avCapCurrent").textContent =
+    "አሁን ያለው ገደብ: " + av.cap + "x" +
+    (av.edge != null ? " · የቤቱ ድርሻ: " + Math.round(av.edge * 100) + "%" : "");
+
+  const bets = av.bets || [];
+
+  $("avBetsBody").innerHTML = bets.length ? bets.map(function(b){
+    return "<tr><td>#" + escapeHtml(String(b.userId)) + "</td>" +
+      '<td class="right balance">' + fmt(b.amount) + "</td>" +
+      '<td class="right balance">' + (b.auto ? b.auto + "x" : "—") + "</td>" +
+      '<td class="right balance" style="color:' + (b.cashed ? "var(--win2)" : "var(--dim)") + '">' +
+      (b.cashed ? "+" + fmt(b.win) + " @" + Number(b.cash_mult).toFixed(2) + "x" : "—") + "</td></tr>";
+  }).join("") : '<tr><td colspan="4" class="empty-table">ውርርድ የለም</td></tr>';
+
+}
+
+
+async function setAviatorCap(value){
+
+  if(!baseUrl || !secret){
+    toast("መጀመሪያ Admin Dashboard ያገናኙ","error");
+    return;
+  }
+
+  const n = Number(value);
+
+  if(!(n >= 1.1 && n <= 200)){
+    toast("ገደቡ ከ 1.1 እስከ 200 መሆን አለበት","error");
+    return;
+  }
+
+  try{
+    await apiPost("/api/admin/aviator/cap", { cap:n });
+    toast("ገደብ " + n + "x ተዘጋጅቷል (ከሚቀጥለው ዙር)","success");
+    $("avCapInput").value = "";
+    await fetchAll();
+  }
+  catch(error){
+    toast("ገደቡን ማዘጋጀት አልተቻለም: " + error.message,"error");
+  }
+
+}
+
+$("avCapBtn").addEventListener("click", function(){ setAviatorCap($("avCapInput").value); });
+$("avCapResetBtn").addEventListener("click", function(){ setAviatorCap(200); });
+$("avCapInput").addEventListener("keydown", function(e){
+  if(e.key === "Enter"){ e.preventDefault(); setAviatorCap(this.value); }
+});
 
 /* =========================
    FEED
