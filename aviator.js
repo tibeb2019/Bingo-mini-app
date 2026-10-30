@@ -156,7 +156,7 @@ module.exports = function (app, h) {
       }
       bet.pending = false;
       safe(() => touch(u.id, u.first_name));
-      safe(() => logActivity(u.id, 'aviator bet ' + amount));
+      safe(() => logActivity({ type: 'aviator_bet', userId: u.id, amount }));
       res.json({ ok: true, balance: r.balance });
     } catch (e) {
       console.error('aviator bet', e);
@@ -180,7 +180,7 @@ module.exports = function (app, h) {
       if (el >= crashMs) return bad(res, 'crashed');
       const mult = multAt(el);
       await settle(b, mult); // cashed flag is set synchronously inside
-      safe(() => logActivity(u.id, 'aviator win ' + b.win + ' @' + mult));
+      safe(() => logActivity({ type: 'aviator_win', userId: u.id, amount: b.win, mult }));
       res.json({ mult, win: b.win, balance: await getBalance(u.id) });
     } catch (e) {
       console.error('aviator cashout', e);

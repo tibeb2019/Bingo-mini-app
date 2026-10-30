@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
@@ -3531,6 +3532,7 @@ app.get(
 
 initDb()
   .then(function () {
+require('./aviator')(app, {validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS});
     app.listen(
       PORT,
       function () {

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="am"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Aviator</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0e0e10;color:#fff;font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:8px}
+.hd{display:flex;align-items:center;justify-content:space-between;padding:6px 4px}
+.back{background:#2a2a2e;border:0;color:#fff;border-radius:8px;padding:8px 12px;font-size:16px}
+.logo{color:#e4002b;font-style:italic;font-weight:900;font-size:26px}
+.bal{background:#1b1b1f;border-radius:16px;padding:6px 12px;color:#28a745;font-weight:700;font-size:14px}
+.hist{display:flex;gap:6px;overflow:hidden;padding:6px 0;height:34px}
+.h{padding:3px 9px;border-radius:12px;font-size:12px;font-weight:700;background:#1b1b1f;white-space:nowrap}
+.c1{color:#34b4ff}.c2{color:#913ef8}.c3{color:#c017b4}
+.game{position:relative;background:#000;border-radius:12px;overflow:hidden;height:240px;border:1px solid #2a2a2e}
+canvas{width:100%;height:100%;display:block}
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.mult{font-size:56px;font-weight:900}
+.mult.red{color:#e4002b}
+.wait{font-size:15px;font-weight:700;letter-spacing:1px;text-align:center}
+.bar{width:60%;height:5px;background:#222;border-radius:3px;margin-top:10px;overflow:hidden;display:none}
+.bar i{display:block;height:100%;background:#e4002b;width:100%}
+.pl{position:absolute;top:6px;left:8px;font-size:12px;color:#aaa}
+.pn{background:#1b1b1f;border-radius:12px;padding:10px;margin-top:8px}
+.tabs{display:flex;background:#0e0e10;border-radius:16px;margin:0 auto 8px;width:160px}
+.tabs button{flex:1;border:0;background:none;color:#999;padding:5px;border-radius:16px;font-size:13px}
+.tabs button.on{background:#2a2a2e;color:#fff}
+.row{display:flex;gap:8px;align-items:stretch}
+.lf{flex:1}
+.st{display:flex;align-items:center;background:#0e0e10;border-radius:20px;height:36px;margin-bottom:6px}
+.st button{width:34px;height:34px;border:0;border-radius:50%;background:#2a2a2e;color:#fff;font-size:18px}
+.st span{flex:1;text-align:center;font-weight:700}
+.q{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.q button{border:0;background:#2a2a2e;color:#ccc;border-radius:12px;padding:5px;font-size:13px}
+.go{flex:1;border:0;border-radius:12px;background:#28a745;color:#fff;font-weight:800;font-size:16px;min-height:80px}
+.go.org{background:#e69500}
+.go.dis{opacity:.5}
+.au{display:none;margin-bottom:6px;font-size:13px;color:#ccc}
+.au input{width:80px;background:#0e0e10;color:#fff;border:1px solid #333;border-radius:8px;padding:6px;margin-left:6px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#333;padding:10px 16px;border-radius:10px;font-size:14px;display:none;z-index:9}
+</style></head><body>
+<div class="hd"><button class="back" id="back">←</button><div class="logo">Aviator</div><div class="bal" id="bal">0.00 ብር</div></div>
+<div class="hist" id="hist"></div>
+<div class="game"><canvas id="cv"></canvas><div class="pl" id="pl"></div>
+<div class="ov"><div class="mult" id="mult"></div><div class="wait" id="wait"></div><div class="bar" id="bar"><i id="bari"></i></div></div></div>
+<div id="panels"></div>
+<div class="toast" id="toast"></div>
+<script>
+var tg=window.Telegram&&Telegram.WebApp;if(tg){tg.ready();tg.expand();}
+var ID=tg?tg.initData:'';
+function $(i){return document.getElementById(i)}
+function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(function(){t.style.display='none'},2500)}
+var ERR={auth:'ማረጋገጫ አልተሳካም',slot:'የተሳሳተ ቦታ',amount:'የተሳሳተ መጠን',auto:'የተሳሳተ Auto ብዜት (1.01-200)',closed:'ውርርድ ተዘግቷል',already:'አስቀድመህ ተወራርደሃል',balance:'ቀሪ ሂሳብ በቂ አይደለም',nobet:'ውርርድ የለም',notflying:'አውሮፕላኑ አልበረረም',crashed:'አውሮፕላኑ በርሯል'};
+function api(p,body){
+var o={};
+if(body){o={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({initData:ID},body))};}
+else{p+='?initData='+encodeURIComponent(ID);}
+return fetch(p,o).then(function(r){return r.json()});
+}
+var S=null,T0=0;
+function cur(){
+if(!S)return 1;
+if(S.phase==='flying'){var ms=S.flying_ms+(Date.now()-T0);return Math.max(1,Math.floor(Math.exp(0.00007*ms)*100)/100);}
+if(S.phase==='crashed')return S.crash||1;
+return 1;
+}
+function poll(){
+api('/api/aviator/state').then(function(d){
+if(d.error){toast(ERR[d.error]||'ስህተት');return;}
+S=d;T0=Date.now();onState();
+}).catch(function(){}).then(function(){setTimeout(poll,300);});
+}
+$('back').onclick=function(){if(history.length>1)history.back();else location.href='/';};
+function draw(){
+var c=$('cv'),w=c.clientWidth,h=c.clientHeight,r=window.devicePixelRatio||1;
+if(c.width!==Math.round(w*r)){c.width=Math.round(w*r);c.height=Math.round(h*r);}
+var x=c.getContext('2d');x.setTransform(r,0,0,r,0,0);x.clearRect(0,0,w,h);
+var a=Math.PI*2/24,i;
+x.save();x.translate(0,h);x.rotate(Date.now()/9000);x.fillStyle='#111114';
+for(i=0;i<24;i+=2){x.beginPath();x.moveTo(0,0);x.arc(0,0,w*2,i*a,(i+1)*a);x.fill();}
+x.restore();
+var m=cur();
+if(S&&S.phase==='flying')$('mult').textContent=m.toFixed(2)+'x';
+if(S&&S.phase==='betting'){var p=Math.max(0,(S.bet_left_ms-(Date.now()-T0))/8000*100);$('bari').style.width=p+'%';}
+if(S&&S.phase!=='betting'&&m>1.0001){
+var x0=15,y0=h-15;
+var P=Math.min(1,Math.log(m)/Math.log(2.5)),Q=Math.min(1,(m-1)/1.5);
+var tx=x0+(w-x0-45)*P,ty=y0-(y0-45)*Q,N=40,k,f,mm,px,py,ex=0,ey=0;
+x.beginPath();x.moveTo(x0,y0);
+for(k=1;k<=N;k++){f=k/N;mm=Math.exp(Math.log(m)*f);px=x0+(tx-x0)*f;py=y0-(y0-ty)*(mm-1)/(m-1);x.lineTo(px,py);if(k===N-1){ex=px;ey=py;}}
+x.lineTo(tx,y0);x.closePath();x.fillStyle='rgba(228,0,43,.25)';x.fill();
+x.beginPath();x.moveTo(x0,y0);
+for(k=1;k<=N;k++){f=k/N;mm=Math.exp(Math.log(m)*f);x.lineTo(x0+(tx-x0)*f,y0-(y0-ty)*(mm-1)/(m-1));}
+x.strokeStyle='#e4002b';x.lineWidth=3;x.stroke();
+if(S.phase==='flying'){
+var ang=Math.atan2(ty-ey,tx-ex);
+x.save();x.translate(tx,ty);x.rotate(ang);
+x.fillStyle='#e4002b';x.beginPath();x.moveTo(-26,4);x.quadraticCurveTo(0,-8,28,0);x.quadraticCurveTo(0,12,-26,4);x.fill();
+x.fillStyle='#a8001f';x.beginPath();x.moveTo(-4,2);x.lineTo(-16,17);x.lineTo(-8,17);x.lineTo(8,3);x.fill();
+x.beginPath();x.moveTo(-24,3);x.lineTo(-30,-9);x.lineTo(-22,-7);x.lineTo(-14,2);x.fill();
+x.fillStyle='#ffd0d6';x.beginPath();x.ellipse(8,-2,6,3,0,0,7);x.fill();
+x.fillStyle='#ddd';x.fillRect(28,-8,3,16);
+x.restore();
+}
+}
+if(window.updCash)updCash();
+requestAnimationFrame(draw);
+}
+function onState(){
+$('bal').textContent=(+S.balance).toFixed(2)+' ብር';
+$('hist').innerHTML=(S.history||[]).map(function(v){return '<span class="h '+(v<2?'c1':v<10?'c2':'c3')+'">'+(+v).toFixed(2)+'x</span>'}).join('');
+$('pl').textContent='👥 '+S.players+' ተጫዋቾች';
+var mu=$('mult'),wt=$('wait'),br=$('bar');
+mu.className='mult';wt.style.color='#fff';
+if(S.phase==='betting'){mu.textContent='';wt.textContent='WAITING FOR NEXT ROUND';br.style.display='block';}
+else if(S.phase==='flying'){wt.textContent='';br.style.display='none';}
+else{br.style.display='none';wt.textContent='FLEW AWAY!';wt.style.color='#e4002b';mu.textContent=(+S.crash).toFixed(2)+'x';mu.className='mult red';}
+updPanels();
+}
+var PN=[{amt:10,tab:0,busy:false},{amt:10,tab:0,busy:false}];
+function stakes(){return (S&&S.stakes)||[5,10,20,30,40,50,80,100,200];}
+function build(){
+var h='',k;
+for(k=0;k<2;k++){
+h+='<div class="pn" data-k="'+k+'"><div class="tabs"><button class="on" data-t="0">Bet</button><button data-t="1">Auto</button></div>';
+h+='<div class="au" id="u'+k+'">Auto Cash out x<input id="x'+k+'" type="number" step="0.01" min="1.01" max="200" value="2.00" inputmode="decimal"></div>';
+h+='<div class="row"><div class="lf"><div class="st"><button data-a="-1">−</button><span id="a'+k+'">10</span><button data-a="1">+</button></div>';
+h+='<div class="q"><button data-q="10">10</button><button data-q="20">20</button><button data-q="50">50</button><button data-q="100">100</button></div></div>';
+h+='<button class="go" id="g'+k+'">Bet</button></div></div>';
+}
+$('panels').innerHTML=h;
+}
+$('panels').onclick=function(e){
+var b=e.target.closest('button');if(!b)return;
+var pn=b.closest('.pn'),k=+pn.dataset.k,P=PN[k];
+if(b.dataset.t!==undefined){
+P.tab=+b.dataset.t;
+var bs=pn.querySelectorAll('.tabs button');
+bs[0].className=P.tab?'':'on';bs[1].className=P.tab?'on':'';
+$('u'+k).style.display=P.tab?'block':'none';
+}else if(b.dataset.a){
+var L=stakes(),i=L.indexOf(P.amt);if(i<0)i=0;
+i=Math.max(0,Math.min(L.length-1,i+(+b.dataset.a)));P.amt=L[i];
+}else if(b.dataset.q){P.amt=+b.dataset.q;}
+else if(b.classList.contains('go')){go(k);}
+$('a'+k).textContent=P.amt;
+if(S)updPanels();
+};
+function go(k){
+var P=PN[k];if(!S||P.busy)return;
+var mb=S.my_bets&&S.my_bets[k];
+if(mb&&S.phase==='flying'&&!mb.cashed){
+P.busy=true;
+api('/api/aviator/cashout',{slot:k}).then(function(d){
+if(d.error){toast(ERR[d.error]||'ስህተት');return;}
+toast('አሸንፈሃል '+(+d.win).toFixed(2)+' ብር ('+(+d.mult).toFixed(2)+'x)');
+mb.cashed=true;mb.cash_mult=d.mult;mb.win=d.win;S.balance=d.balance;
+$('bal').textContent=(+d.balance).toFixed(2)+' ብር';updPanels();
+}).catch(function(){toast('የኔትወርክ ስህተት')}).then(function(){P.busy=false});
+}else if(!mb&&S.phase==='betting'){
+var au=null;
+if(P.tab===1){au=parseFloat($('x'+k).value);if(isNaN(au)||au<1.01||au>200){toast(ERR.auto);return;}}
+P.busy=true;
+api('/api/aviator/bet',{slot:k,amount:P.amt,auto:au}).then(function(d){
+if(d.error){toast(ERR[d.error]||'ስህተት');return;}
+toast('ውርርድ ተቀምጧል ✅');
+if(!S.my_bets)S.my_bets=[null,null];
+S.my_bets[k]={amount:P.amt,auto:au,cashed:false};
+S.balance=d.balance;$('bal').textContent=(+d.balance).toFixed(2)+' ብር';updPanels();
+}).catch(function(){toast('የኔትወርክ ስህተት')}).then(function(){P.busy=false});
+}else if(mb){toast('ውርርድ አስቀድሞ ተቀምጧል');}
+else{toast('ቀጣዩን ዙር ጠብቅ');}
+}
+function setG(k,t,cls){var g=$('g'+k);g.textContent=t;g.className='go'+(cls?' '+cls:'');}
+function updPanels(){
+var k,mb,P;
+for(k=0;k<2;k++){
+P=PN[k];mb=S.my_bets&&S.my_bets[k];
+if(S.phase==='betting'){
+if(mb)setG(k,'ተወራርደሃል '+mb.amount+' ብር','dis');else setG(k,'Bet '+P.amt+' ብር','');
+}else if(S.phase==='flying'){
+if(!mb)setG(k,'ቀጣዩን ዙር ጠብቅ','dis');
+else if(mb.cashed)setG(k,'አሸንፈሃል '+(+mb.win).toFixed(2)+' ብር ('+(+mb.cash_mult).toFixed(2)+'x)','dis');
+else setG(k,'Cash out '+(mb.amount*cur()).toFixed(2)+' ብር','org');
+}else{
+if(!mb)setG(k,'ቀጣዩን ዙር ጠብቅ','dis');
+else if(mb.cashed)setG(k,'አሸንፈሃል '+(+mb.win).toFixed(2)+' ብር ('+(+mb.cash_mult).toFixed(2)+'x)','dis');
+else setG(k,'ተሸንፈሃል -'+mb.amount+' ብር','dis');
+}
+}
+}
+function updCash(){
+if(!S||S.phase!=='flying')return;
+var k,mb;
+for(k=0;k<2;k++){mb=S.my_bets&&S.my_bets[k];
+if(mb&&!mb.cashed)$('g'+k).textContent='Cash out '+(mb.amount*cur()).toFixed(2)+' ብር';}
+}
+build();poll();draw();
+</script></body></html>
