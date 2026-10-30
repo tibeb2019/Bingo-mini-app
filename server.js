@@ -3602,9 +3602,13 @@ app.get(
    START SERVER
 ========================================================= */
 
+try {
+  require('./aviator')(app, {validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS, requireAdmin});
+} catch (e) { console.error('AVIATOR LOAD ERROR:', e); }
+
 initDb()
   .then(function () {
-require('./aviator')(app, {validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS, requireAdmin});
+
     app.listen(
       PORT,
       function () {
