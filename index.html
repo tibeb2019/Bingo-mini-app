@@ -299,11 +299,6 @@ let spinning = false;
 let ticketPlaced = false;
 let ticketId = null;
 
-/*
-  FIX: stake options now match the server's STAKE_OPTIONS exactly
-  (5,10,20,30,40,50,80,100,200) — previously 80/100/200 were missing here
-  so users could never select or bet them even though the server allowed it.
-*/
 const STAKE_OPTIONS = [5,10,20,30,40,50,80,100,200];
 const STAKE_MIN = 5, STAKE_MAX = 200;
 let currentStake = 10;
@@ -312,6 +307,17 @@ const BET_LENGTH = 40;
 const SPIN_LENGTH = 10;
 const RESULT_DISPLAY_MS = 4000;
 const CYCLE_LENGTH = BET_LENGTH + SPIN_LENGTH;
+let timeOffset = 0;
+async function syncTime(){
+  try{
+    const t0 = Date.now();
+    const r = await fetch('/', {method:'HEAD', cache:'no-store'});
+    const d = r.headers.get('date');
+    if (d) timeOffset = new Date(d).getTime() + 500 - (t0 + Date.now())/2;
+  }catch(e){}
+}
+syncTime();
+setInterval(syncTime, 300000);
 const HISTORY_MAX = 10;
 let resultHistory = [];
 
@@ -386,12 +392,10 @@ renderStakeChips();
 document.getElementById('walletStake').textContent = currentStake;
 document.getElementById('spinCostLabel').textContent = currentStake;
 
-/* ---------- DEMO / SIMULATED live player counter ----------
-   Shows a number of players that varies slightly each round (10,000+ base).
-   This is a display-only demo counter, not a real connection count. */
+/* ---------- DEMO / SIMULATED live player counter ---------- */
 let currentPlayerCount = 10247;
 function randomizePlayerCount(){
-  const delta = Math.floor(Math.random() * 240) - 100; // -100..+139
+  const delta = Math.floor(Math.random() * 240) - 100;
   currentPlayerCount = Math.max(10000, currentPlayerCount + delta);
   const el = document.getElementById('playerCountNum');
   if (el) el.textContent = currentPlayerCount.toLocaleString('en-US');
@@ -404,16 +408,9 @@ function updatePlayerCount(){
   if (cid !== lastPlayerCountRound){ lastPlayerCountRound = cid; randomizePlayerCount(); }
 }
 
-/* ---------- DEMO / SIMULATED winner ticker ----------
-   These are clearly labeled DEMO / SIMULATED — not real players or real winners.
-   A brand new random phone number + amount is generated every time it fires
-   (no fixed list, so it never repeats the same value twice in a row).
-
-   UPDATED: each betting round now shows a fixed burst of 2–5 winners
-   (randomized per round), each one blinking in exactly 1.8 seconds apart.
-   The burst restarts every time a new betting round begins. */
+/* ---------- DEMO / SIMULATED winner ticker ---------- */
 const TICKER_AMOUNTS = [180, 240, 300, 360, 420, 480, 600, 720, 840, 900, 1080, 1200, 1440, 1500, 1800, 2160];
-const TICKER_BLINK_MS = 1800;      // fixed 1.8s gap between each blink
+const TICKER_BLINK_MS = 1800;
 const TICKER_MIN_PER_ROUND = 2;
 const TICKER_MAX_PER_ROUND = 5;
 let lastTickerPhone = null;
@@ -440,8 +437,6 @@ function showDemoWinner(){
   ticker.style.animation = 'tickerFade .45s ease';
 }
 
-/* Fires a random count (2–5) of winner blinks for the current round,
-   each one exactly TICKER_BLINK_MS apart. */
 let winnerBurstTimers = [];
 function clearWinnerBurst(){
   winnerBurstTimers.forEach(t=>clearTimeout(t));
@@ -450,7 +445,7 @@ function clearWinnerBurst(){
 function startWinnerBurstForRound(){
   clearWinnerBurst();
   const span = TICKER_MAX_PER_ROUND - TICKER_MIN_PER_ROUND + 1;
-  const count = TICKER_MIN_PER_ROUND + Math.floor(Math.random() * span); // 2..5
+  const count = TICKER_MIN_PER_ROUND + Math.floor(Math.random() * span);
   for (let i = 0; i < count; i++){
     const t = setTimeout(showDemoWinner, i * TICKER_BLINK_MS);
     winnerBurstTimers.push(t);
@@ -459,7 +454,7 @@ function startWinnerBurstForRound(){
 showDemoWinner();
 startWinnerBurstForRound();
 
-function roundIdNowSafe(){ return Math.floor(Date.now()/1000 / CYCLE_LENGTH); }
+function roundIdNowSafe(){ return Math.floor((Date.now()+timeOffset)/1000 / CYCLE_LENGTH); }
 
 /* ---------- roulette colours ---------- */
 const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
@@ -619,8 +614,8 @@ let currentRotation = 0;
 let lastCycleId = null;
 let lastPhase = null;
 
-function roundIdNow(){ return Math.floor(Date.now()/1000 / CYCLE_LENGTH); }
-function cyclePosNow(){ return Math.floor(Date.now()/1000) % CYCLE_LENGTH; }
+function roundIdNow(){ return Math.floor((Date.now()+timeOffset)/1000 / CYCLE_LENGTH); }
+function cyclePosNow(){ return Math.floor((Date.now()+timeOffset)/1000) % CYCLE_LENGTH; }
 function isSpinPhase(pos){ return pos >= BET_LENGTH; }
 function secondsLeftInBet(pos){ return BET_LENGTH - pos; }
 function secondsLeftInSpin(pos){ return CYCLE_LENGTH - pos; }
@@ -776,7 +771,6 @@ function tickRoundClock(){
   if (phase === 'spin' && lastPhase === 'bet'){
     resolveRound(cid);
   }
-  // new betting round started -> restart the 2-5 winner blink burst
   if (phase === 'bet' && cid !== lastCycleId){
     startWinnerBurstForRound();
   }
