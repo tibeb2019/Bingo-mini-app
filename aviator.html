@@ -9,6 +9,7 @@
 body{margin:0;background:#0e0e12;color:#fff;font-family:system-ui,sans-serif;user-select:none;padding-bottom:20px}
 .top{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#1b1c1d}
 .back{background:#2c2d30;border:0;color:#fff;border-radius:8px;padding:6px 12px;font-size:16px}
+.snd{background:#2c2d30;border:0;color:#fff;border-radius:8px;padding:6px 10px;font-size:15px}
 .logo{color:#e50539;font-style:italic;font-weight:900;font-size:24px}
 .bal{font-weight:700;color:#28a909;font-size:14px}
 .hist{display:flex;gap:6px;overflow:hidden;padding:8px 10px;background:#101012;min-height:36px}
@@ -41,7 +42,7 @@ canvas{width:100%;height:100%;display:block}
 #toast{position:fixed;left:50%;top:60px;transform:translateX(-50%);background:#333;padding:8px 14px;border-radius:8px;font-size:14px;display:none;z-index:9;max-width:90%;text-align:center}
 </style>
 </head><body>
-<div class="top"><button class="back" id="back">&lsaquo;</button><div class="logo">Aviator</div><div class="bal" id="bal">0.00 ብር</div></div>
+<div class="top"><button class="back" id="back">&lsaquo;</button><div class="logo">Aviator</div><button class="snd" id="snd">&#128266;</button><div class="bal" id="bal">0.00 ብር</div></div>
 <div class="hist" id="hist"></div>
 <div class="game">
 <canvas id="cv"></canvas>
@@ -58,6 +59,7 @@ var STAKES=[5,10,20,30,40,50,80,100,200];
 var QUICK=[10,20,50,100];
 var RATE=0.00007;
 var S=null,flyStart=0,betEnd=0,crashT=0,lastPhase='',inflight=false,histKey='';
+var cashedSnd=[false,false];
 var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),W=0,H=0;
 
 function $(id){return document.getElementById(id);}
@@ -69,6 +71,84 @@ function errMsg(j,cash){if(j&&j.error==='already'&&cash)return 'ቀድሞ አው
 
 function post(url,body){body.initData=initData;
 return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){j._s=r.status;return j;});});}
+
+/* ---------- sound (Web Audio, no files needed) ---------- */
+var AS=(function(){
+var ac=null,master=null,muted=false,eng=null,lastTick=0;
+try{muted=localStorage.getItem('av_mute')==='1';}catch(e){}
+function init(){
+if(!ac){var C=window.AudioContext||window.webkitAudioContext;if(!C)return false;
+ac=new C();master=ac.createGain();master.gain.value=muted?0:0.6;master.connect(ac.destination);}
+if(ac.state==='suspended'){try{ac.resume();}catch(e){}}
+return true;}
+function tone(f,d,type,vol,slide,delay){
+if(!init()||ac.state!=='running')return;
+var t=ac.currentTime+(delay||0),o=ac.createOscillator(),g=ac.createGain();
+o.type=type||'sine';o.frequency.setValueAtTime(f,t);
+if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+d);
+g.gain.setValueAtTime(0.0001,t);
+g.gain.exponentialRampToValueAtTime(vol||0.3,t+0.01);
+g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+o.connect(g);g.connect(master);o.start(t);o.stop(t+d+0.05);}
+function noise(d,vol,delay){
+if(!init()||ac.state!=='running')return;
+var t=ac.currentTime+(delay||0),len=Math.floor(ac.sampleRate*d),buf=ac.createBuffer(1,len,ac.sampleRate),a=buf.getChannelData(0);
+for(var i=0;i<len;i++)a[i]=(Math.random()*2-1)*(1-i/len);
+var s=ac.createBufferSource();s.buffer=buf;
+var f=ac.createBiquadFilter();f.type='lowpass';
+f.frequency.setValueAtTime(3000,t);f.frequency.exponentialRampToValueAtTime(200,t+d);
+var g=ac.createGain();g.gain.value=vol||0.4;
+s.connect(f);f.connect(g);g.connect(master);s.start(t);}
+var o={
+unlock:init,
+bet:function(){tone(700,0.06,'square',0.15);tone(1000,0.08,'square',0.12,null,0.05);},
+startFlight:function(){
+if(!init())return;o.stopEngine();
+noise(0.9,0.25);tone(120,0.9,'sawtooth',0.12,400);
+var t=ac.currentTime,o1=ac.createOscillator(),o2=ac.createOscillator(),fl=ac.createBiquadFilter(),g=ac.createGain(),lfo=ac.createOscillator(),lg=ac.createGain();
+o1.type='sawtooth';o1.frequency.value=85;
+o2.type='square';o2.frequency.value=42;
+fl.type='lowpass';fl.frequency.value=500;
+g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.18,t+0.6);
+lfo.frequency.value=22;lg.gain.value=0.06;
+lfo.connect(lg);lg.connect(g.gain);
+o1.connect(fl);o2.connect(fl);fl.connect(g);g.connect(master);
+o1.start();o2.start();lfo.start();
+eng={o1:o1,o2:o2,fl:fl,g:g,lfo:lfo};lastTick=0;},
+update:function(m){
+if(!eng||!ac)return;
+m=Math.max(1,m||1);var t=ac.currentTime,k=Math.min(m,30),f=85+k*14;
+eng.o1.frequency.setTargetAtTime(f,t,0.1);
+eng.o2.frequency.setTargetAtTime(f/2,t,0.1);
+eng.fl.frequency.setTargetAtTime(500+k*90,t,0.1);
+eng.lfo.frequency.setTargetAtTime(22+k*0.8,t,0.1);
+var w=Math.floor(m);
+if(w>lastTick&&w>=2){lastTick=w;tone(900+w*25,0.07,'sine',0.12);}},
+stopEngine:function(){
+if(!eng)return;
+try{var t=ac.currentTime;eng.g.gain.cancelScheduledValues(t);eng.g.gain.setTargetAtTime(0.0001,t,0.05);
+eng.o1.stop(t+0.3);eng.o2.stop(t+0.3);eng.lfo.stop(t+0.3);}catch(e){}
+eng=null;},
+cashout:function(){
+tone(784,0.14,'triangle',0.25);tone(988,0.14,'triangle',0.25,null,0.09);
+tone(1319,0.30,'triangle',0.28,null,0.18);tone(2637,0.20,'sine',0.10,null,0.18);},
+crash:function(){
+o.stopEngine();noise(0.7,0.45);
+tone(500,0.8,'sawtooth',0.22,40);tone(180,0.5,'square',0.15,50,0.05);},
+toggleMute:function(){
+muted=!muted;if(master)master.gain.value=muted?0:0.6;
+try{localStorage.setItem('av_mute',muted?'1':'0');}catch(e){}
+return muted;},
+isMuted:function(){return muted;},
+pause:function(){if(ac&&ac.state==='running'){try{ac.suspend();}catch(e){}}},
+resume:function(){if(ac&&ac.state==='suspended'){try{ac.resume();}catch(e){}}}
+};
+return o;})();
+document.addEventListener('pointerdown',function(){AS.unlock();});
+document.addEventListener('touchstart',function(){AS.unlock();},{passive:true});
+document.addEventListener('visibilitychange',function(){if(document.hidden)AS.pause();else AS.resume();});
+$('snd').textContent=AS.isMuted()?'\uD83D\uDD07':'\uD83D\uDD0A';
+$('snd').onclick=function(){var m=AS.toggleMute();$('snd').textContent=m?'\uD83D\uDD07':'\uD83D\uDD0A';};
 
 /* ---------- panels ---------- */
 var P=[];
@@ -95,7 +175,7 @@ if(ph==='flying'&&my&&!my.cashed){
 p.busy=true;
 post('/api/aviator/cashout',{slot:p.i}).then(function(j){p.busy=false;
 if(j.error){toast(errMsg(j,true));}
-else{toast('x'+fmt(j.mult)+' — '+fmt(j.win)+' ብር አሸንፈዋል!');if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';}
+else{if(!cashedSnd[p.i]){cashedSnd[p.i]=true;AS.cashout();}toast('x'+fmt(j.mult)+' — '+fmt(j.win)+' ብር አሸንፈዋል!');if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';}
 poll();}).catch(function(){p.busy=false;toast('ግንኙነት የለም');});
 return;}
 if(ph==='betting'&&!my){
@@ -104,7 +184,7 @@ if(p.tab==='auto'){auto=parseFloat(p.av.value);if(!(auto>=1.01&&auto<=200)){toas
 p.busy=true;
 post('/api/aviator/bet',{slot:p.i,amount:STAKES[p.idx],auto:auto}).then(function(j){p.busy=false;
 if(j.error){toast(errMsg(j,false));}
-else{toast('ተወራርደዋል '+fmt(STAKES[p.idx])+' ብር');if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';}
+else{AS.bet();toast('ተወራርደዋል '+fmt(STAKES[p.idx])+' ብር');if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';}
 poll();}).catch(function(){p.busy=false;toast('ግንኙነት የለም');});
 return;}
 if(ph==='flying'&&!my)toast('ቀጣዩን ዙር ይጠብቁ');
@@ -136,10 +216,19 @@ fetch('/api/aviator/state?initData='+encodeURIComponent(initData)).then(function
 inflight=false;
 if(j.error){if(j.error==='auth')toast(ERR.auth);return;}
 var now=Date.now();
+var first=!S;
 S=j;
 if(j.phase==='flying')flyStart=now-(j.flying_ms||0);
 if(j.phase==='betting')betEnd=now+(j.bet_left_ms||0);
-if(j.phase!==lastPhase){if(j.phase==='crashed')crashT=now;lastPhase=j.phase;}
+if(j.phase!==lastPhase){
+if(j.phase==='crashed')crashT=now;
+if(j.phase==='flying')AS.startFlight();
+else if(j.phase==='crashed'){if(lastPhase!=='')AS.crash();else AS.stopEngine();}
+else AS.stopEngine();
+if(j.phase==='betting')cashedSnd=[false,false];
+lastPhase=j.phase;}
+for(var si=0;si<2;si++){var mb=j.my_bets&&j.my_bets[si];
+if(mb&&mb.cashed&&!cashedSnd[si]){cashedSnd[si]=true;if(!first)AS.cashout();}}
 if(j.balance!=null)$('bal').textContent=fmt(j.balance)+' ብር';
 $('pl').textContent='ተጫዋቾች: '+(j.players||0);
 var h=(j.history||[]);var k=h.join(',');
@@ -199,7 +288,7 @@ plane(34,H-26,-0.25);
 var om=$('ovm'),ob=$('ovb'),bar=$('ovbar');
 if(!S){om.textContent='';ob.textContent='';bar.style.display='none';}
 else if(ph==='betting'){om.textContent='WAITING FOR NEXT ROUND';ob.textContent='';bar.style.display='block';$('ovi').style.width=Math.max(0,Math.min(100,(betEnd-now)/8000*100))+'%';}
-else if(ph==='flying'){om.textContent='';ob.textContent=fmt(m)+'x';ob.style.color='#fff';bar.style.display='none';}
+else if(ph==='flying'){om.textContent='';ob.textContent=fmt(m)+'x';ob.style.color='#fff';bar.style.display='none';AS.update(m);}
 else{om.textContent='FLEW AWAY!';om.style.color='#fff';ob.textContent=fmt(m)+'x';ob.style.color='#e50539';bar.style.display='none';}
 if(ph!=='crashed')om.style.color='#ddd';
 P.forEach(updPanel);
