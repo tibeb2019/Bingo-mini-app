@@ -5,7 +5,7 @@ const express = require('express');
 module.exports = function (app, h) {
   const { validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS, requireAdmin } = h;
 
-  const BET_MS = 8000, CRASH_MS = 4000, RATE = 0.00007, EDGE = 0.03, CAP = 200, HIST = 15;
+  const BET_MS = 8000, CRASH_MS = 4000, RATE = 0.00007, EDGE = 0.10, CAP = 200, HIST = 15;
   const json = express.json();
 
   let round = 0, phase = 'betting', phaseStart = Date.now();
