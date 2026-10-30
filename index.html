@@ -1,39 +1,87 @@
 <!DOCTYPE html>
 <html lang="am"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Bingotom</title>
+<title>Spin Win</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-:root{--gold:#e8c15c;--gold-dim:#8a6d1f;--black:#141414;--black2:#0a0a0a;--green:#1e8a54;--text:#f4ede0;--text-dim:#b7ab8f;--felt:#0d4a2c;--felt2:#0a3a22}
+:root{--sky:#38bdf8;--deep:#0b3b8c;--navy:#071a3d;--ice:#e0f2fe}
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;min-height:100%;font-family:'Segoe UI',system-ui,sans-serif;background:radial-gradient(circle at top,var(--felt) 0,var(--felt2) 45%,var(--black2) 100%);color:var(--text)}
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;background:var(--black2);border-bottom:2px solid var(--gold-dim)}
-.brand{font-size:20px;font-weight:800;letter-spacing:.6px;color:var(--gold);font-family:Georgia,'Times New Roman',serif}
-.bal{flex:1;text-align:center;font-weight:700;color:var(--gold)}
-.bal small{display:block;font-size:11px;color:var(--text-dim);font-weight:400}
-.dep{background:var(--green);color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;font-size:14px}
-h2{text-align:center;margin:22px 0 8px;color:var(--gold);font-family:Georgia,serif}
-.cards{display:grid;gap:16px;padding:14px}
-.card{display:block;text-decoration:none;color:var(--text);border:2px solid var(--gold-dim);border-radius:18px;padding:18px;background:linear-gradient(160deg,#1b1b1b,#0a0a0a);box-shadow:0 4px 16px rgba(0,0,0,.5)}
+html,body{margin:0;padding:0;min-height:100%;font-family:'Segoe UI',system-ui,sans-serif;color:#fff;background:linear-gradient(180deg,#0ea5e9 0%,#1d4ed8 45%,#071a3d 100%) fixed}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;background:rgba(255,255,255,.14);border-bottom:1px solid rgba(255,255,255,.35)}
+.brand{font-size:22px;font-weight:900;letter-spacing:.5px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.35)}
+.bal{flex:1;text-align:center;font-weight:800;color:#fff}
+.bal small{display:block;font-size:11px;color:var(--ice);font-weight:400}
+.dep{background:linear-gradient(180deg,#4ade80,#16a34a);color:#fff;border:0;border-radius:12px;padding:10px 14px;font-weight:800;font-size:14px;box-shadow:0 3px 10px rgba(0,0,0,.3)}
+h2{text-align:center;margin:20px 0 6px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.35)}
+.cards{display:grid;gap:18px;padding:14px}
+.card{display:block;text-decoration:none;color:#fff;border-radius:22px;overflow:hidden;box-shadow:0 8px 22px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.7)}
 .card:active{transform:scale(.98)}
-.card .ic{font-size:44px}
-.card .nm{font-size:24px;font-weight:800;color:var(--gold);font-family:Georgia,serif;margin-top:6px}
-.card .ds{color:var(--text-dim);font-size:14px;margin-top:4px}
-.card .go{display:inline-block;margin-top:12px;background:var(--gold);color:#141414;font-weight:800;border-radius:10px;padding:8px 20px}
+.card svg{display:block;width:100%;height:auto}
+.info{padding:14px 16px 16px}
+.spin .info{background:linear-gradient(180deg,#ffffff,#dbeafe);color:#0b3b8c}
+.avi .info{background:linear-gradient(180deg,#0b3b8c,#071a3d);color:#fff}
+.nm{font-size:26px;font-weight:900}
+.ds{font-size:14px;margin-top:2px;opacity:.85}
+.go{display:inline-block;margin-top:10px;border-radius:12px;padding:9px 26px;font-weight:900}
+.spin .go{background:linear-gradient(180deg,#38bdf8,#0369a1);color:#fff}
+.avi .go{background:linear-gradient(180deg,#ffffff,#bae6fd);color:#0b3b8c}
 </style></head><body>
 <div class="top">
-<div class="brand">Bingotom</div>
+<div class="brand">Spin Win</div>
 <div class="bal"><small>ቀሪ ሂሳብ</small><span id="bal">...</span> ETB</div>
 <button class="dep" id="dep">+ Deposit</button>
 </div>
 <h2>ጨዋታ ምረጥ</h2>
 <div class="cards">
-<a class="card" data-p="/spin.html" href="/spin.html">
-<div class="ic">🎡</div><div class="nm">Spin Win</div>
-<div class="ds">ሩሌት - ቁጥር ምረጥ እና አሸንፍ</div><span class="go">ተጫወት</span></a>
-<a class="card" data-p="/aviator.html" href="/aviator.html">
-<div class="ic">✈️</div><div class="nm">Aviator</div>
-<div class="ds">አውሮፕላኑ ሳይበር በፊት Cash out!</div><span class="go">ተጫወት</span></a>
+
+<a class="card spin" data-p="/spin.html" href="/spin.html">
+<svg viewBox="0 0 400 190" xmlns="http://www.w3.org/2000/svg">
+<defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient></defs>
+<rect width="400" height="190" fill="url(#g1)"/>
+<g transform="translate(200 98)">
+<circle r="84" fill="#fff"/>
+<circle r="76" fill="#0b3b8c"/>
+<path d="M0 0 L0 -72 A72 72 0 0 1 51 -51Z" fill="#38bdf8"/>
+<path d="M0 0 L51 -51 A72 72 0 0 1 72 0Z" fill="#fff"/>
+<path d="M0 0 L72 0 A72 72 0 0 1 51 51Z" fill="#38bdf8"/>
+<path d="M0 0 L51 51 A72 72 0 0 1 0 72Z" fill="#fff"/>
+<path d="M0 0 L0 72 A72 72 0 0 1 -51 51Z" fill="#38bdf8"/>
+<path d="M0 0 L-51 51 A72 72 0 0 1 -72 0Z" fill="#fff"/>
+<path d="M0 0 L-72 0 A72 72 0 0 1 -51 -51Z" fill="#38bdf8"/>
+<path d="M0 0 L-51 -51 A72 72 0 0 1 0 -72Z" fill="#fff"/>
+<circle r="22" fill="#fbbf24" stroke="#fff" stroke-width="4"/>
+<circle r="7" fill="#fff"/>
+</g>
+<polygon points="200,28 190,12 210,12" fill="#ef4444" stroke="#fff" stroke-width="2"/>
+</svg>
+<div class="info"><div class="nm">Spin Win</div><div class="ds">ሩሌት - ቁጥር ምረጥ እና አሸንፍ</div><span class="go">ተጫወት</span></div>
+</a>
+
+<a class="card avi" data-p="/aviator.html" href="/aviator.html">
+<svg viewBox="0 0 400 190" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c4a6e"/><stop offset="1" stop-color="#38bdf8"/></linearGradient>
+<linearGradient id="g3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity=".9"/></linearGradient>
+</defs>
+<rect width="400" height="190" fill="url(#g2)"/>
+<circle cx="60" cy="40" r="26" fill="#fff" opacity=".18"/>
+<ellipse cx="90" cy="150" rx="50" ry="14" fill="#fff" opacity=".25"/>
+<ellipse cx="330" cy="40" rx="40" ry="11" fill="#fff" opacity=".25"/>
+<path d="M0 185 C110 180 230 150 330 70" stroke="url(#g3)" stroke-width="5" fill="none" stroke-linecap="round"/>
+<path d="M0 190 C110 185 230 155 330 75 L330 190Z" fill="#fff" opacity=".12"/>
+<g transform="translate(330 66) rotate(-32)">
+<ellipse cx="0" cy="0" rx="46" ry="11" fill="#fff"/>
+<path d="M-34 -2 L-52 -22 L-42 -22 L-22 -4Z" fill="#e0f2fe"/>
+<path d="M-6 -2 L-26 -34 L-12 -34 L16 -2Z" fill="#bae6fd" stroke="#fff" stroke-width="1"/>
+<path d="M-6 4 L-26 34 L-12 34 L16 4Z" fill="#7dd3fc" stroke="#fff" stroke-width="1"/>
+<ellipse cx="28" cy="-3" rx="9" ry="4" fill="#0369a1"/>
+<path d="M40 -4 Q50 0 40 5" fill="#ef4444"/>
+</g>
+<text x="20" y="46" fill="#fff" font-size="32" font-weight="900" font-family="Georgia,serif">2.45x</text>
+</svg>
+<div class="info"><div class="nm">Aviator</div><div class="ds">አውሮፕላኑ ሳይበር በፊት Cash out!</div><span class="go">ተጫወት</span></div>
+</a>
+
 </div>
 <script>
 var tg=window.Telegram&&Telegram.WebApp;
