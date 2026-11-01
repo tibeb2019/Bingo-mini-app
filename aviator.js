@@ -5,7 +5,8 @@ const express = require('express');
 module.exports = function (app, h) {
   const { validateInitData, getBalance, deductIfSufficient, changeBalance, touch, logActivity, STAKE_OPTIONS, requireAdmin } = h;
 
-  const BET_MS = 8000, CRASH_MS = 4000, RATE = 0.00007, EDGE = 0.03, CAP = 200, HIST = 15;
+  const BET_MS = 8000, CRASH_MS = 4000, RATE = 0.00007, EDGE = 0.10, CAP_MAX = 200, HIST = 15;
+  let cap = CAP_MAX; // admin-adjustable max multiplier (applies from the next round)
   const json = express.json();
 
   let round = 0, phase = 'betting', phaseStart = Date.now();
@@ -20,7 +21,7 @@ module.exports = function (app, h) {
     const r = crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656;
     let c = Math.floor(((1 - EDGE) / (1 - r)) * 100) / 100;
     if (!(c >= 1)) c = 1;
-    return Math.min(c, CAP);
+    return Math.min(c, cap);
   }
 
   function newRound(ts) {
@@ -124,12 +125,12 @@ module.exports = function (app, h) {
       if (!u) return res.status(401).json({ error: 'auth' });
       const slot = Number(p.slot);
       if (slot !== 0 && slot !== 1) return bad(res, 'slot');
-      const amount = Math.round(Number(p.amount) * 100) / 100;
-      if (!(Number.isFinite(amount) && amount >= 1)) return bad(res, 'amount');
+      const amount = Number(p.amount);
+      if (!STAKE_OPTIONS.includes(amount)) return bad(res, 'amount');
       let auto = null;
       if (p.auto !== null && p.auto !== undefined && p.auto !== '') {
         auto = Math.round(Number(p.auto) * 100) / 100;
-        if (!(auto >= 1.01 && auto <= CAP)) return bad(res, 'auto');
+        if (!(auto >= 1.01 && auto < cap)) return bad(res, 'auto');
       }
       advance();
       if (phase !== 'betting') return bad(res, 'closed');
@@ -188,6 +189,14 @@ module.exports = function (app, h) {
     }
   });
 
+  // admin: set the max multiplier the plane may reach (random within it); takes effect next round
+  app.post('/api/admin/aviator/cap', requireAdmin, json, (req, res) => {
+    const v = Math.round(Number((req.body || {}).cap) * 100) / 100;
+    if (!(v >= 1.1 && v <= CAP_MAX)) return res.status(400).json({ error: 'cap must be between 1.10 and ' + CAP_MAX });
+    cap = v;
+    res.json({ ok: true, cap });
+  });
+
   app.get('/api/admin/aviator', requireAdmin, (req, res) => {
     advance();
     const el = Date.now() - phaseStart;
@@ -198,7 +207,8 @@ module.exports = function (app, h) {
     res.json({
       round, phase,
       mult: phase === 'flying' ? multAt(Math.min(el, crashMs)) : (phase === 'crashed' ? crashPoint : 1),
-      crash_point: crashPoint,
+      crash_point: phase === 'crashed' ? crashPoint : null,
+      cap, cap_max: CAP_MAX, edge: EDGE,
       bet_left_ms: phase === 'betting' ? Math.max(0, BET_MS - el) : 0,
       players: new Set(list.map(b => String(b.userId))).size,
       bets: list,
